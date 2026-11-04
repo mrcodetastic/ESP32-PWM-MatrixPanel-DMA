@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-S3 Parallel SPI DMA Payload & Logic Analyzer Visualizer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            950: '#030712',
+                            900: '#0f172a',
+                            850: '#1e293b',
+                            800: '#334155',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .canvas-container {
+            user-select: none;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- Header / Navigation Bar -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 px-6 py-3.5 flex flex-wrap justify-between items-center gap-4 shadow-xl">
+        <div class="flex items-center space-x-3">
+            <div class="bg-cyan-500/10 border border-cyan-500/30 p-2 rounded-xl text-cyan-400 shadow-inner">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    ESP32-S3 Parallel SPI Logic Analyzer
+                    <span class="text-[10px] uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-mono font-semibold">Octal DMA Mode</span>
+                </h1>
+                <p class="text-xs text-slate-400">MBI5153 Payload Buffer Generator & Zoom-Adaptive Signal Waveform Inspector</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button onclick="resetToDefaults()" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Reset Defaults
+            </button>
+            <button onclick="recompileAndRun()" class="text-xs bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold px-4 py-1.5 rounded-lg shadow-lg shadow-cyan-900/40 transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Execute & Generate
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Grid -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Sidebar / Config & Code Controls (4 Cols) -->
+        <div class="lg:col-span-4 space-y-5">
+
+            <!-- 1. Parameter Config Card -->
+            <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                    Payload Parameters
+                </h2>
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">BYTES_PER_REPEAT</label>
+                        <input type="number" id="paramBytesPerRepeat" value="3" min="1" max="10" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">REPEATS (GCLKs)</label>
+                        <input type="number" id="paramRepeats" value="513" min="1" max="2048" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">REPEAT_COUNT (Rows)</label>
+                        <input type="number" id="paramRepeatCount" value="20" min="1" max="32" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">PADDING_SIZE</label>
+                        <input type="number" id="paramPadding" value="8" min="0" max="64" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    </div>
+                </div>
+
+                <!-- Bitmask Reference Badges -->
+                <div class="mt-4 pt-3 border-t border-slate-800">
+                    <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-2">Pin Bitmask Mapping Reference</span>
+                    <div class="grid grid-cols-3 gap-1.5 font-mono text-[10px]">
+                        <span class="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300">BIT_A: 1&lt;&lt;2 (0x04)</span>
+                        <span class="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300">BIT_B: 1&lt;&lt;3 (0x08)</span>
+                        <span class="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300">BIT_C: 1&lt;&lt;4 (0x10)</span>
+                        <span class="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300">BIT_D: 1&lt;&lt;5 (0x20)</span>
+                        <span class="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300">BIT_E: 1&lt;&lt;6 (0x40)</span>
+                        <span class="bg-slate-950 border border-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold">BIT_GCLK: 1&lt;&lt;7</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Editable Live JavaScript Logic Code Editor -->
+            <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        getByteValue JS Generator Logic
+                    </h2>
+                    <span class="text-[10px] bg-cyan-950 border border-cyan-800 text-cyan-300 px-2 py-0.5 rounded font-mono">Live Editable</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mb-2">Modify the JS logic below and press <kbd class="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-200">Ctrl+Enter</kbd> or click Execute to update waveforms.</p>
+                
+                <div class="relative flex-1">
+                    <textarea id="codeEditor" rows="18" spellcheck="false" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-cyan-200 focus:outline-none focus:border-cyan-500 leading-relaxed resize-y selection:bg-cyan-900 focus:ring-1 focus:ring-cyan-500"></textarea>
+                </div>
+
+                <div id="compileStatus" class="mt-3 text-xs font-mono p-2.5 rounded-lg border hidden transition-all">
+                    <!-- Dynamic compilation status message -->
+                </div>
+            </section>
+
+        </div>
+
+        <!-- Right Column: Visualizers, Inspector & Stats (8 Cols) -->
+        <div class="lg:col-span-8 space-y-5">
+
+            <!-- 3. Statistics & Verification Dashboard -->
+            <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-md">
+                    <span class="text-[11px] font-medium text-slate-400 block mb-0.5">Total Buffer Allocation</span>
+                    <span id="statTotalSize" class="text-lg font-bold font-mono text-white">0 B</span>
+                    <span class="text-[10px] text-slate-500 block">Bytes via DMA</span>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-md">
+                    <span class="text-[11px] font-medium text-slate-400 block mb-0.5">Total GCLK Pulses</span>
+                    <span id="statGclkCount" class="text-lg font-bold font-mono text-emerald-400">0</span>
+                    <span id="statGclkExpect" class="text-[10px] text-slate-500 block">Expected: 10,260</span>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-md">
+                    <span class="text-[11px] font-medium text-slate-400 block mb-0.5">GCLK Duty Cycle (Row)</span>
+                    <span id="statGclkDuty" class="text-lg font-bold font-mono text-emerald-400">33.33%</span>
+                    <span class="text-[10px] text-slate-500 block">1 active per 3 bytes</span>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-md">
+                    <span class="text-[11px] font-medium text-slate-400 block mb-0.5">Address Line Stability</span>
+                    <span id="statAddrStability" class="text-lg font-bold font-mono text-cyan-400">VERIFIED</span>
+                    <span id="statAddrDetail" class="text-[10px] text-emerald-400 block">Constant within rows</span>
+                </div>
+            </section>
+
+            <!-- 4. Interactive Logic Analyzer Waveform Canvas View -->
+            <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col space-y-3">
+                
+                <!-- Waveform Header Controls & Jump Presets -->
+                <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                            Digital Logic Signal Timeline Analyzer
+                        </h2>
+                        <span class="text-[11px] text-slate-400">Zoom out for dynamic badge/text aggregation (⚡ 513 Clocks, Row Labels) | Drag to Pan</span>
+                    </div>
+
+                    <!-- Preset Jump Nav Buttons -->
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button onclick="jumpToPreset('start')" class="text-[11px] bg-slate-850 hover:bg-slate-800 border border-slate-700 text-cyan-300 px-2.5 py-1 rounded transition">Row 0 Start</button>
+                        <button onclick="jumpToPreset('overview')" class="text-[11px] bg-slate-850 hover:bg-slate-800 border border-slate-700 text-amber-300 px-2.5 py-1 rounded transition">Full Overview</button>
+                        <button onclick="jumpToPreset('firstGclk')" class="text-[11px] bg-slate-850 hover:bg-slate-800 border border-slate-700 text-emerald-400 px-2.5 py-1 rounded transition">1st GCLK Pulse</button>
+                        <button onclick="jumpToPreset('end')" class="text-[11px] bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-1 rounded transition">Buffer End</button>
+                        <button onclick="resetZoom()" class="text-[11px] bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 text-cyan-200 px-2 py-1 rounded transition ml-1">Reset Zoom</button>
+                    </div>
+                </div>
+
+                <!-- Canvas Waveform Viewport -->
+                <div class="bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden canvas-container">
+                    <canvas id="waveformCanvas" class="w-full h-[320px] block cursor-crosshair"></canvas>
+                    
+                    <!-- Hover Tooltip -->
+                    <div id="waveformTooltip" class="absolute hidden bg-slate-900/95 border border-cyan-500/60 text-xs px-3 py-2 rounded-lg shadow-2xl pointer-events-none font-mono z-30 backdrop-blur-md">
+                        <!-- Dynamic Tooltip content -->
+                    </div>
+                </div>
+
+                <!-- Legend & Status Footer -->
+                <div class="flex flex-wrap justify-between items-center text-[11px] text-slate-400 px-1 pt-1">
+                    <div class="flex items-center gap-4">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block shadow-sm shadow-emerald-500/50"></span> MBI_GCLK (Bit 7)</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-cyan-400 inline-block"></span> ADDR_A..ADDR_E (Bits 2-6)</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-slate-700 inline-block"></span> Unused Lines (Bits 0-1)</span>
+                    </div>
+                    <div id="zoomInfo" class="font-mono text-cyan-400">Zoom: 100% | Visible Range: Byte 0 - 150</div>
+                </div>
+            </section>
+
+            <!-- 5. Raw Buffer Matrix Inspector (Hex & Binary Grid) -->
+            <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+                    <div>
+                        <h2 class="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            Raw DMA Buffer Matrix Inspector
+                        </h2>
+                        <span class="text-[11px] text-slate-400">Octal Parallel Bit Mapping per Byte Position</span>
+                    </div>
+
+                    <!-- Search & Filter Controls -->
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="tableSearch" placeholder="Search Index, Hex..." oninput="filterTable()" class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono w-36">
+                        <select id="tableFilterType" onchange="filterTable()" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-500">
+                            <option value="all">All Bytes</option>
+                            <option value="gclk">GCLK Active Bytes Only</option>
+                            <option value="padding">Padding Bytes Only</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse font-mono text-xs">
+                        <thead class="bg-slate-900 sticky top-0 border-b border-slate-800 text-slate-400 z-10">
+                            <tr>
+                                <th class="p-2">Byte Idx</th>
+                                <th class="p-2">Row</th>
+                                <th class="p-2">Hex</th>
+                                <th class="p-2">Binary</th>
+                                <th class="p-2 text-center text-emerald-400">D7 (GCLK)</th>
+                                <th class="p-2 text-center text-cyan-300">D6 (E)</th>
+                                <th class="p-2 text-center text-cyan-300">D5 (D)</th>
+                                <th class="p-2 text-center text-cyan-300">D4 (C)</th>
+                                <th class="p-2 text-center text-cyan-300">D3 (B)</th>
+                                <th class="p-2 text-center text-cyan-300">D2 (A)</th>
+                                <th class="p-2 text-center text-slate-500">D1</th>
+                                <th class="p-2 text-center text-slate-500">D0</th>
+                                <th class="p-2 text-right">Block Region</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bufferTableBody" class="divide-y divide-slate-900 text-slate-300">
+                            <!-- Rows populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Footer -->
+                <div class="flex justify-between items-center mt-3 text-xs text-slate-400">
+                    <span id="tableCountInfo">Showing 0 - 50 of 0 bytes</span>
+                    <div class="flex items-center gap-2">
+                        <button onclick="changePage(-1)" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded text-slate-300">Prev</button>
+                        <span id="pageIndicator" class="font-mono text-cyan-400 px-1">Page 1 / 1</span>
+                        <button onclick="changePage(1)" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded text-slate-300">Next</button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-800 py-3 px-6 text-center text-xs text-slate-500">
+        ESP32-S3 Octal SPI Visualizer &bull; Zoom-Adaptive Waveform Aggregation &bull; Verified mapping: Bit 2 (ADDR_A) to Bit 6 (ADDR_E) & Bit 7 (MBI_GCLK)
+    </footer>
+
+    <!-- Main Application JavaScript Logic -->
+    <script>
+        // Default JavaScript Code Template loaded in Editor
+        const defaultCodeSource = `// Correct Bitmasks for ESP32-S3 Octal SPI Mapping
+const BIT_A    = (1 << 2);  // maps to data2_io_num (ADDR_A_PIN)
+const BIT_B    = (1 << 3);  // maps to data3_io_num (ADDR_B_PIN)
+const BIT_C    = (1 << 4);  // maps to data4_io_num (ADDR_C_PIN)
+const BIT_D    = (1 << 5);  // maps to data5_io_num (ADDR_D_PIN)
+const BIT_E    = (1 << 6);  // maps to data6_io_num (ADDR_E_PIN)
+const BIT_GCLK = (1 << 7);  // maps to data7_io_num (MBI_GCLK)
+
+/**
+ * Calculates byte value at position
+ * @param {number} position - Current byte index in DMA buffer
+ * @param {object} params - { PADDING_SIZE, REPEATS, BYTES_PER_REPEAT, REPEAT_COUNT }
+ */
+function getByteValue(position, params) {
+    const { PADDING_SIZE, REPEATS, BYTES_PER_REPEAT } = params;
+    const sequenceSize = BYTES_PER_REPEAT * REPEATS;
+    const blockSize = PADDING_SIZE + sequenceSize + PADDING_SIZE;
+
+    // Determine row sequence index (0 to 19)
+    const sequenceIndex = Math.floor(position / blockSize);
+    const offset = position % blockSize;
+
+    // Calculate position inside main payload sequence
+    const sequencePosition = offset - PADDING_SIZE;
+    const byteIndex = sequencePosition % BYTES_PER_REPEAT;
+
+    // Combine row address bits (row 0..19 mapped to BIT_A..BIT_E)
+    const row = sequenceIndex & 0x1F;
+    let addressBits = 0;
+    if (row & (1 << 0)) addressBits |= BIT_A;
+    if (row & (1 << 1)) addressBits |= BIT_B;
+    if (row & (1 << 2)) addressBits |= BIT_C;
+    if (row & (1 << 3)) addressBits |= BIT_D;
+    if (row & (1 << 4)) addressBits |= BIT_E;
+
+    // Handle Padding Regions (Return address lines, GCLK low)
+    if (offset < PADDING_SIZE || offset >= PADDING_SIZE + sequenceSize) {
+        return addressBits;
+    }    
+
+    // 3rd byte in repeat is the GCLK pulse (MSB / Bit 7 set high)
+    if (byteIndex === 2) {
+        return addressBits | BIT_GCLK;
+    } else {
+        return addressBits;
+    }
+}`;
+
+        // Application State Variables
+        let computedBuffer = new Uint8Array(0);
+        let compiledGetByteValue = null;
+        let currentPage = 1;
+        const pageSize = 50;
+
+        // Waveform Viewport Pan & Zoom State
+        let viewportStart = 0;
+        let viewportSpan = 150; // Visible byte count
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartViewport = 0;
+
+        // HTML Elements
+        const editorEl = document.getElementById('codeEditor');
+        const canvas = document.getElementById('waveformCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('waveformTooltip');
+
+        // Initialize Editor
+        editorEl.value = defaultCodeSource;
+
+        // Keybindings: Ctrl+Enter to execute code
+        editorEl.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                recompileAndRun();
+            }
+        });
+
+        function resetToDefaults() {
+            document.getElementById('paramBytesPerRepeat').value = 3;
+            document.getElementById('paramRepeats').value = 513;
+            document.getElementById('paramRepeatCount').value = 20;
+            document.getElementById('paramPadding').value = 8;
+            editorEl.value = defaultCodeSource;
+            recompileAndRun();
+        }
+
+        // Recompile Code & Generate Buffer
+        function recompileAndRun() {
+            const statusEl = document.getElementById('compileStatus');
+            try {
+                const codeText = editorEl.value;
+                const wrappedCode = `
+                    ${codeText}
+                    return getByteValue;
+                `;
+                compiledGetByteValue = new Function(wrappedCode)();
+
+                const sampleParams = { PADDING_SIZE: 8, REPEATS: 513, BYTES_PER_REPEAT: 3, REPEAT_COUNT: 20 };
+                const testResult = compiledGetByteValue(0, sampleParams);
+                if (typeof testResult !== 'number') {
+                    throw new Error("getByteValue must return a valid byte number (0-255).");
+                }
+
+                statusEl.className = "mt-3 text-xs font-mono p-2.5 rounded-lg border bg-emerald-950/60 border-emerald-800 text-emerald-300 block";
+                statusEl.innerHTML = `✓ JavaScript compiled cleanly. Recomputed buffer memory payload.`;
+                setTimeout(() => statusEl.classList.add('hidden'), 3500);
+
+                generateBuffer();
+            } catch (err) {
+                statusEl.className = "mt-3 text-xs font-mono p-2.5 rounded-lg border bg-rose-950/80 border-rose-800 text-rose-300 block";
+                statusEl.innerHTML = `❌ Error in JS logic: ${err.message}`;
+            }
+        }
+
+        // Main Data Processing Loop
+        function generateBuffer() {
+            if (!compiledGetByteValue) return;
+
+            const bytesPerRepeat = parseInt(document.getElementById('paramBytesPerRepeat').value) || 3;
+            const repeats = parseInt(document.getElementById('paramRepeats').value) || 513;
+            const repeatCount = parseInt(document.getElementById('paramRepeatCount').value) || 20;
+            const paddingSize = parseInt(document.getElementById('paramPadding').value) || 8;
+
+            const params = { PADDING_SIZE: paddingSize, REPEATS: repeats, BYTES_PER_REPEAT: bytesPerRepeat, REPEAT_COUNT: repeatCount };
+
+            const sequenceSize = bytesPerRepeat * repeats;
+            const blockSize = paddingSize + sequenceSize + paddingSize;
+            const totalAllocSize = blockSize * repeatCount;
+
+            computedBuffer = new Uint8Array(totalAllocSize);
+
+            let totalGclkPulses = 0;
+            let addressChangeErrors = 0;
+
+            for (let i = 0; i < totalAllocSize; i++) {
+                const byteVal = compiledGetByteValue(i, params) & 0xFF;
+                computedBuffer[i] = byteVal;
+
+                if (byteVal & 0x80) {
+                    totalGclkPulses++;
+                }
+            }
+
+            // Verify address line stability within rows
+            for (let r = 0; r < repeatCount; r++) {
+                const rowStart = r * blockSize;
+                const rowEnd = rowStart + blockSize;
+                const expectedAddrBits = computedBuffer[rowStart] & 0x7C;
+
+                for (let i = rowStart; i < rowEnd; i++) {
+                    const currentAddrBits = computedBuffer[i] & 0x7C;
+                    if (currentAddrBits !== expectedAddrBits) {
+                        addressChangeErrors++;
+                    }
+                }
+            }
+
+            // Update Statistics
+            document.getElementById('statTotalSize').textContent = totalAllocSize.toLocaleString() + ' B';
+            document.getElementById('statGclkCount').textContent = totalGclkPulses.toLocaleString();
+            
+            const expectedPulses = repeats * repeatCount;
+            document.getElementById('statGclkExpect').textContent = `Expected: ${expectedPulses.toLocaleString()}`;
+
+            const dutyPercent = (1 / bytesPerRepeat * 100).toFixed(2);
+            document.getElementById('statGclkDuty').textContent = `${dutyPercent}%`;
+
+            const stabilityEl = document.getElementById('statAddrStability');
+            const stabilityDetailEl = document.getElementById('statAddrDetail');
+            if (addressChangeErrors === 0) {
+                stabilityEl.textContent = "STABLE";
+                stabilityEl.className = "text-lg font-bold font-mono text-emerald-400";
+                stabilityDetailEl.textContent = "Constant within all rows";
+                stabilityDetailEl.className = "text-[10px] text-emerald-400 block";
+            } else {
+                stabilityEl.textContent = "UNSTABLE";
+                stabilityEl.className = "text-lg font-bold font-mono text-rose-400";
+                stabilityDetailEl.textContent = `${addressChangeErrors} address glitch(es)`;
+                stabilityDetailEl.className = "text-[10px] text-rose-400 block";
+            }
+
+            currentPage = 1;
+            filterTable();
+            renderWaveform();
+        }
+
+        // Jump Presets for Quick Viewport Navigation
+        function jumpToPreset(preset) {
+            const bytesPerRepeat = parseInt(document.getElementById('paramBytesPerRepeat').value) || 3;
+            const repeats = parseInt(document.getElementById('paramRepeats').value) || 513;
+            const repeatCount = parseInt(document.getElementById('paramRepeatCount').value) || 20;
+            const paddingSize = parseInt(document.getElementById('paramPadding').value) || 8;
+            const sequenceSize = bytesPerRepeat * repeats;
+            const blockSize = paddingSize + sequenceSize + paddingSize;
+
+            switch (preset) {
+                case 'start':
+                    viewportStart = 0;
+                    viewportSpan = 150;
+                    break;
+                case 'overview':
+                    viewportStart = 0;
+                    viewportSpan = computedBuffer.length;
+                    break;
+                case 'firstGclk':
+                    viewportStart = paddingSize + bytesPerRepeat - 2;
+                    viewportSpan = 100;
+                    break;
+                case 'end':
+                    viewportStart = Math.max(0, computedBuffer.length - 200);
+                    viewportSpan = 200;
+                    break;
+            }
+            clampViewport();
+            renderWaveform();
+        }
+
+        function resetZoom() {
+            viewportStart = 0;
+            viewportSpan = 150;
+            clampViewport();
+            renderWaveform();
+        }
+
+        function clampViewport() {
+            if (viewportSpan > computedBuffer.length) viewportSpan = computedBuffer.length;
+            if (viewportSpan < 10) viewportSpan = 10;
+            if (viewportStart < 0) viewportStart = 0;
+            if (viewportStart + viewportSpan > computedBuffer.length) {
+                viewportStart = computedBuffer.length - viewportSpan;
+            }
+        }
+
+        // Render Digital Logic Signals on Canvas with Zoom-Adaptive Aggregation
+        function renderWaveform() {
+            if (!computedBuffer || computedBuffer.length === 0) return;
+
+            clampViewport();
+
+            const width = canvas.parentElement.clientWidth;
+            const height = 320;
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const bytesPerRepeat = parseInt(document.getElementById('paramBytesPerRepeat').value) || 3;
+            const repeats = parseInt(document.getElementById('paramRepeats').value) || 513;
+            const repeatCount = parseInt(document.getElementById('paramRepeatCount').value) || 20;
+            const paddingSize = parseInt(document.getElementById('paramPadding').value) || 8;
+            const sequenceSize = bytesPerRepeat * repeats;
+            const blockSize = paddingSize + sequenceSize + paddingSize;
+
+            // Signal Channels
+            const channels = [
+                { bit: 7, name: 'MBI_GCLK (D7)', color: '#10b981' }, // Emerald
+                { bit: 6, name: 'ADDR_E (D6)', color: '#22d3ee' },   // Cyan
+                { bit: 5, name: 'ADDR_D (D5)', color: '#22d3ee' },
+                { bit: 4, name: 'ADDR_C (D4)', color: '#22d3ee' },
+                { bit: 3, name: 'ADDR_B (D3)', color: '#22d3ee' },
+                { bit: 2, name: 'ADDR_A (D2)', color: '#22d3ee' },
+            ];
+
+            const leftMargin = 120;
+            const plotWidth = width - leftMargin - 20;
+            const rowHeight = height / (channels.length + 0.8);
+            const stepX = plotWidth / viewportSpan;
+            const pixelsPerClock = stepX * bytesPerRepeat;
+
+            // Update Zoom Text Info
+            const zoomPercent = Math.round((150 / viewportSpan) * 100);
+            document.getElementById('zoomInfo').textContent = `Zoom: ${zoomPercent}% | Visible: Byte ${Math.round(viewportStart)} - ${Math.round(viewportStart + viewportSpan)}`;
+
+            // Draw Background Regions (Padding vs Payload vs Row Boundaries)
+            for (let i = 0; i < viewportSpan; i++) {
+                const byteIdx = Math.floor(viewportStart + i);
+                if (byteIdx >= computedBuffer.length) break;
+
+                const offset = byteIdx % blockSize;
+                const isPadding = (offset < paddingSize || offset >= paddingSize + sequenceSize);
+                const isRowBoundary = (offset === 0);
+
+                const x = leftMargin + i * stepX;
+
+                if (isPadding) {
+                    ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+                    ctx.fillRect(x, 0, stepX, height);
+                }
+
+                if (isRowBoundary) {
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = 1.2;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+
+                    // Only show row text if stepX is wide enough
+                    if (stepX > 1.5) {
+                        const rowNum = Math.floor(byteIdx / blockSize);
+                        ctx.fillStyle = '#f59e0b';
+                        ctx.font = '10px JetBrains Mono, monospace';
+                        ctx.fillText(`Row ${rowNum}`, x + 4, 15);
+                    }
+                }
+            }
+
+            // Draw Channels and Waveforms (or Zoom-Adaptive Aggregated Badges)
+            channels.forEach((ch, idx) => {
+                const baselineY = (idx + 1) * rowHeight + 15;
+                const highY = baselineY - 22;
+                const lowY = baselineY;
+
+                // Channel Label
+                ctx.fillStyle = ch.color;
+                ctx.font = '11px JetBrains Mono, monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText(ch.name, leftMargin - 12, baselineY - 6);
+
+                // Baseline Grid Line
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(leftMargin, lowY);
+                ctx.lineTo(leftMargin + plotWidth, lowY);
+                ctx.stroke();
+
+                // Check if this channel (e.g. GCLK Bit 7) is zoomed out below threshold (< 6px per clock pulse)
+                // If so, render clean aggregated text badge instead of compressed noise waveforms.
+                const isClockChannel = (ch.bit === 7);
+                const isZoomedOutClock = isClockChannel && (pixelsPerClock < 8);
+
+                if (isZoomedOutClock) {
+                    // Render aggregated badge for each row's clock sequence span
+                    const firstRow = Math.max(0, Math.floor(viewportStart / blockSize));
+                    const lastRow = Math.min(repeatCount - 1, Math.floor((viewportStart + viewportSpan) / blockSize));
+
+                    for (let r = firstRow; r <= lastRow; r++) {
+                        const rowStartByte = r * blockSize;
+                        const payloadStartByte = rowStartByte + paddingSize;
+                        const payloadEndByte = payloadStartByte + sequenceSize;
+
+                        const startX = leftMargin + (payloadStartByte - viewportStart) * stepX;
+                        const endX = leftMargin + (payloadEndByte - viewportStart) * stepX;
+                        const spanWidth = endX - startX;
+
+                        if (spanWidth > 6) {
+                            // Draw aggregated pulse train summary band
+                            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+                            ctx.strokeStyle = '#10b981';
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.roundRect(startX, highY - 2, spanWidth, (lowY - highY) + 4, 4);
+                            ctx.fill();
+                            ctx.stroke();
+
+                            if (spanWidth > 85) {
+                                ctx.fillStyle = '#34d399';
+                                ctx.font = '10px JetBrains Mono, monospace';
+                                ctx.textAlign = 'center';
+                                ctx.fillText(`⚡ ${repeats} GCLK Pulses`, startX + spanWidth / 2, baselineY - 9);
+                            }
+                        }
+                    }
+                } else {
+                    // Standard High-Detail Digital Square Waveform rendering
+                    ctx.strokeStyle = ch.color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+
+                    let firstByteVal = (computedBuffer[Math.min(computedBuffer.length - 1, Math.max(0, Math.floor(viewportStart)))] & (1 << ch.bit)) ? 1 : 0;
+                    let lastY = firstByteVal ? highY : lowY;
+                    ctx.moveTo(leftMargin, lastY);
+
+                    for (let i = 0; i < viewportSpan; i++) {
+                        const byteIdx = viewportStart + i;
+                        if (byteIdx >= computedBuffer.length) break;
+
+                        const bitVal = (computedBuffer[Math.floor(byteIdx)] & (1 << ch.bit)) ? 1 : 0;
+                        const x1 = leftMargin + i * stepX;
+                        const x2 = leftMargin + (i + 1) * stepX;
+                        const currentY = bitVal ? highY : lowY;
+
+                        ctx.lineTo(x1, lastY);
+                        ctx.lineTo(x1, currentY);
+                        ctx.lineTo(x2, currentY);
+
+                        lastY = currentY;
+                    }
+                    ctx.stroke();
+                }
+            });
+
+            // Zoom-Adaptive Address Line Row Badges (when zoomed out on address channels Bits 2-6)
+            if (stepX < 25) {
+                const firstRow = Math.max(0, Math.floor(viewportStart / blockSize));
+                const lastRow = Math.min(repeatCount - 1, Math.floor((viewportStart + viewportSpan) / blockSize));
+
+                for (let r = firstRow; r <= lastRow; r++) {
+                    const rowStartByte = r * blockSize;
+                    const rowEndByte = rowStartByte + blockSize;
+
+                    const startX = leftMargin + (rowStartByte - viewportStart) * stepX;
+                    const endX = leftMargin + (rowEndByte - viewportStart) * stepX;
+                    const rowWidth = endX - startX;
+
+                    if (rowWidth > 50) {
+                        const payloadByte = rowStartByte + paddingSize;
+                        const addrBits = (computedBuffer[payloadByte] & 0x7C) >> 2;
+                        const hexAddr = '0x' + addrBits.toString(16).toUpperCase();
+
+                        // Render subtle summary box across address channels (Rows 1 to 5)
+                        const midChannelY = (3 + 1) * rowHeight + 15;
+                        ctx.fillStyle = 'rgba(34, 211, 238, 0.06)';
+                        ctx.strokeStyle = 'rgba(34, 211, 238, 0.25)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.roundRect(startX + 2, midChannelY - 55, rowWidth - 4, 110, 4);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        if (rowWidth > 80) {
+                            ctx.fillStyle = '#22d3ee';
+                            ctx.font = '10px JetBrains Mono, monospace';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(`Row ${r} (Addr: ${hexAddr})`, startX + rowWidth / 2, midChannelY - 62);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Mouse Drag to Pan & Scroll to Zoom Interactions
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartViewport = viewportStart;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const leftMargin = 120;
+                const plotWidth = canvas.width - leftMargin - 20;
+                const stepX = plotWidth / viewportSpan;
+
+                const deltaX = e.clientX - dragStartX;
+                const deltaBytes = Math.round(deltaX / stepX);
+
+                viewportStart = dragStartViewport - deltaBytes;
+                clampViewport();
+                renderWaveform();
+                return;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const leftMargin = 120;
+            const plotWidth = canvas.width - leftMargin - 20;
+
+            if (mouseX < leftMargin || mouseX > leftMargin + plotWidth) {
+                tooltip.classList.add('hidden');
+                return;
+            }
+
+            const stepX = plotWidth / viewportSpan;
+            const offsetIndex = Math.floor((mouseX - leftMargin) / stepX);
+            const byteIdx = Math.floor(viewportStart + offsetIndex);
+
+            if (byteIdx >= 0 && byteIdx < computedBuffer.length) {
+                const val = computedBuffer[byteIdx];
+                const hex = '0x' + val.toString(16).padStart(2, '0').toUpperCase();
+                const bin = val.toString(2).padStart(8, '0');
+
+                const bytesPerRepeat = parseInt(document.getElementById('paramBytesPerRepeat').value) || 3;
+                const repeats = parseInt(document.getElementById('paramRepeats').value) || 513;
+                const paddingSize = parseInt(document.getElementById('paramPadding').value) || 8;
+                const blockSize = paddingSize + (bytesPerRepeat * repeats) + paddingSize;
+
+                const row = Math.floor(byteIdx / blockSize);
+                const offset = byteIdx % blockSize;
+
+                tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                tooltip.style.top = (e.clientY - rect.top - 20) + 'px';
+                tooltip.classList.remove('hidden');
+
+                const isGclk = (val & 0x80) ? '<span class="text-emerald-400 font-bold">GCLK ACTIVE</span>' : '<span class="text-slate-500">GCLK LOW</span>';
+
+                tooltip.innerHTML = `
+                    <div class="font-bold text-cyan-300">Byte Index: ${byteIdx} (Row ${row}, Offset ${offset})</div>
+                    <div class="text-slate-300">Hex: <span class="text-white">${hex}</span> | Bin: <span class="text-white">${bin}</span></div>
+                    <div>State: ${isGclk}</div>
+                `;
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 1.25 : 0.8;
+            viewportSpan = Math.round(viewportSpan * zoomFactor);
+            clampViewport();
+            renderWaveform();
+        }, { passive: false });
+
+        // Table Filter & Pagination Matrix
+        function filterTable() {
+            const tbody = document.getElementById('bufferTableBody');
+            tbody.innerHTML = '';
+
+            const searchVal = document.getElementById('tableSearch').value.toLowerCase();
+            const filterType = document.getElementById('tableFilterType').value;
+
+            const bytesPerRepeat = parseInt(document.getElementById('paramBytesPerRepeat').value) || 3;
+            const repeats = parseInt(document.getElementById('paramRepeats').value) || 513;
+            const paddingSize = parseInt(document.getElementById('paramPadding').value) || 8;
+            const sequenceSize = bytesPerRepeat * repeats;
+            const blockSize = paddingSize + sequenceSize + paddingSize;
+
+            let filteredIndices = [];
+
+            for (let i = 0; i < computedBuffer.length; i++) {
+                const val = computedBuffer[i];
+                const rowIdx = Math.floor(i / blockSize);
+                const offset = i % blockSize;
+                const isPadding = (offset < paddingSize || offset >= paddingSize + sequenceSize);
+                const isGclk = !!(val & 0x80);
+
+                if (filterType === 'gclk' && !isGclk) continue;
+                if (filterType === 'padding' && !isPadding) continue;
+
+                const hexStr = '0x' + val.toString(16).padStart(2, '0').toUpperCase();
+                const binStr = val.toString(2).padStart(8, '0');
+
+                if (searchVal) {
+                    if (!i.toString().includes(searchVal) && !hexStr.toLowerCase().includes(searchVal) && !binStr.includes(searchVal)) {
+                        continue;
+                    }
+                }
+
+                filteredIndices.push({ i, rowIdx, val, hexStr, binStr, isPadding, isGclk });
+            }
+
+            const totalFiltered = filteredIndices.length;
+            const totalPages = Math.ceil(totalFiltered / pageSize) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            const startIdx = (currentPage - 1) * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, totalFiltered);
+
+            for (let idx = startIdx; idx < endIdx; idx++) {
+                const item = filteredIndices[idx];
+                const v = item.val;
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/80 transition';
+                if (item.isGclk) tr.classList.add('bg-emerald-950/20');
+                if (item.isPadding) tr.classList.add('opacity-70');
+
+                tr.innerHTML = `
+                    <td class="p-2 text-slate-400">${item.i}</td>
+                    <td class="p-2 text-cyan-400">${item.rowIdx}</td>
+                    <td class="p-2 font-semibold text-white">${item.hexStr}</td>
+                    <td class="p-2 text-slate-400 font-mono">${item.binStr}</td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x80) ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x40) ? 'bg-cyan-400' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x20) ? 'bg-cyan-400' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x10) ? 'bg-cyan-400' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x08) ? 'bg-cyan-400' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x04) ? 'bg-cyan-400' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x02) ? 'bg-slate-700' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-center"><span class="inline-block w-3 h-3 rounded ${ (v & 0x01) ? 'bg-slate-700' : 'bg-slate-800' }"></span></td>
+                    <td class="p-2 text-right text-[10px] ${ item.isPadding ? 'text-amber-400' : 'text-emerald-400' }">${ item.isPadding ? 'PADDING' : 'PAYLOAD' }</td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('tableCountInfo').textContent = `Showing ${totalFiltered > 0 ? startIdx + 1 : 0} - ${endIdx} of ${totalFiltered} bytes`;
+            document.getElementById('pageIndicator').textContent = `Page ${currentPage} / ${totalPages}`;
+        }
+
+        function changePage(dir) {
+            currentPage += dir;
+            if (currentPage < 1) currentPage = 1;
+            filterTable();
+        }
+
+        // On Window Load
+        window.onload = function() {
+            recompileAndRun();
+        };
+
+        // Input parameter triggers
+        ['paramBytesPerRepeat', 'paramRepeats', 'paramRepeatCount', 'paramPadding'].forEach(id => {
+            document.getElementById(id).addEventListener('change', recompileAndRun);
+        });
+
+        window.addEventListener('resize', () => {
+            renderWaveform();
+        });
+    </script>
+</body>
+</html>

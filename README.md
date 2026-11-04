@@ -1,80 +1,31 @@
-### Overview of PWM (and GCLK) Based LED Panel vs Shift Register Based LED Matrix Panel
+## Using a 78 x 78 pixel MBI5153 based PWM LED MatrixPanel with a ESP32-S2 or S3.
+![image](https://github.com/mrcodetastic/ESP32S3-MBI5153-DMG1075-DMA/assets/12006953/55241e2b-edfa-4dc6-80c6-e6e21618c9ec)
 
-LED panels, whether based on PWM (Pulse Width Modulation) or shift registers, are used to display images or videos by controlling the state of each individual LED in a matrix layout. The main difference between these two types of panels lies in how they control the LEDs and update the image data.
+Uses PWM based chip that takes 16 bits sent in a series for every pixel in the relevant chain.
 
----
+There are 12 channels, as the panel is broken into 4 x RGB sections for each 1/4 of the panel (20 pixel in height each, for a total of 80px of which only 78 physical pixels exist).
 
-### PWM (and GCLK) Based LED Panels:
+The code compensates for the 2 'ghost' pixels.
 
-#### Implementation / Code
+More info on the panels here: https://led.limehouselabs.org/docs/tiles/dmg1083/
 
-This repository has an example implementations (for the ESP32-S2 and ESP32-S3) for a MBI5153 based LED PWM panel. It has been tested and is working. This can be used as a base for potentially other panels that use the GLCK + PWM approach.
+## Software and Hardware implementation(s)
+There are two hardware implementations for this LED panel, as one implementation isn't enough for me. As these two Espressif MCU’s have different capabilities and constraints, the software implementations are different. 
 
+tl/dr - The ESP32-S3 is the best device to use of the two implementations. However, the ESP32-S2 is super cheap to buy and does the job depending on your needs. 
 
-#### **Pulse Width Modulation (PWM):**
-PWM is a technique where the brightness of each LED is controlled by varying the duty cycle of a signal that drives the LED. This method allows for fine control over the brightness levels of each LED. The pulse width (or duty cycle) determines how long the LED is on within a given time frame (usually measured in microseconds or milliseconds). By adjusting the duty cycle, the LED can be dimmed or brightened.
+![image](docs/implementations.jpg)
 
-- **How it Works:**
-  - Each LED has a specific driving signal that is modulated with a PWM signal to adjust the brightness.
-  - The signal typically involves controlling the voltage to the LED, effectively turning it on and off very quickly.
-  - The greater the "on" duration in each cycle (duty cycle), the brighter the LED appears to be.
-  - LEDs are often driven by dedicated drivers capable of handling multiple LEDs, using PWM to control the brightness.
-  
-#### **GCLK (Global Clock):**
-- A **Global Clock (GCLK)** refers to a time reference used in PWM-driven LED panels to synchronize the timing of operations across all LEDs.
-- This clock ensures that the PWM signals are generated in a synchronized manner, allowing multiple LEDs to change their brightness levels at the same time in a coordinated fashion.
+### ESP32-S2: I2S LCD mode, 24-bit parallel DMA
 
-#### **Advantages of PWM/GCLK:**
-- **Smooth brightness control**: PWM allows fine control over the brightness of individual LEDs, leading to smoother transitions and better image quality.
-- **Low power consumption**: Since the LED is not constantly on (it is pulsed), PWM allows for efficient energy usage.
-- **High-quality image display**: Because each LED can be dimmed to a precise level, more nuanced images can be displayed with smoother gradients and better color transitions.
-  
-#### **Key Difference from Shift Register Panels**:
-- In PWM panels, the primary control is over the intensity of the light emitted by each individual LED, not just its on/off state.
-- GCLK ensures that all PWM signals are generated at consistent intervals, resulting in more uniform control of the LED panel's brightness and image quality.
+The [`esp32s2_i2s_24bit_dma_platformio`](esp32s2_i2s_24bit_dma_platformio/) implementation turns the S2's I2S peripheral into a parallel signal engine by using its LCD mode. A circular DMA buffer contains successive 24-bit GPIO states: the 12 colour data lanes plus DCLK, LAT, GCLK, and row-address signals. Once set up, I2S and DMA continuously replay the stream; software prepares pixel values in that buffer rather than bit-banging every edge. The buffer can be placed in internal SRAM or PSRAM, with the expected trade-off in available capacity and achievable clock rate.
 
----
+This is a wonderfully audacious use of a peripheral most people associate with audio: one I2S stream becomes a complete, carefully timed panel-refresh machine. It is also a relatively compact way to make an inexpensive ESP32-S2 do a surprising amount of work.
 
-### Shift Register-Based LED Matrix Panels:
+### ESP32-S3: LCD_CAM/GDMA for pixels, GPSPI2 DMA for scan timing
 
-#### Implementation / Code
+The [`esp32s3_gdma_lcd_gspi2_dma_platformio`](esp32s3_gdma_lcd_gspi2_dma_platformio/) implementation gives the two jobs to different S3 peripherals. LCD_CAM, fed by GDMA, shifts packed 16-bit grayscale pixel data and latch signals across the parallel outputs. GPSPI2, using an octal-mode segmented DMA loop, generates the repeating GCLK and row-address stream. At a frame boundary the scan stream is stopped, a separate transfer produces the MBI Vsync/latch sequence, and the scan stream is restarted. The CPU prepares image data and coordinates the frame update while the peripherals handle the repetitive, timing-sensitive traffic.
 
-Refer to: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA
+This is an even more elaborate and frankly brilliant bit of peripheral choreography: LCD_CAM and SPI are being pressed into service as deterministic signal generators, with DMA doing the heavy lifting. The S3 implementation is more capable, but its GPSPI2 path also leans on private ESP-IDF internals, so it is more version-sensitive than a tidy public-API library would be.
 
-#### **How it Works:**
-- A **shift register** is used to control the LEDs, and each row or column of the LED matrix is addressed sequentially. Shift registers convert serial data into parallel data, allowing individual LEDs to be addressed with a single signal.
-- In a shift register-based system, data (which can include color and brightness information) is shifted through the registers one bit at a time. This data is typically stored in latches or registers, which control the state of the LEDs (on or off).
-  
-#### **Persistence of Vision (POV):**
-- Since LEDs are addressed in a line-by-line (or row-by-row) fashion, each row of LEDs is lit up briefly. The human eye perceives the image due to **persistence of vision**, where the display is refreshed quickly enough (usually within a few milliseconds) to create the illusion of a full, continuous image.
-- The process of constantly refreshing rows creates a "scan" effect, where only one row of LEDs is lit at a time, but this is done at a high speed to make the entire display appear as though all LEDs are illuminated at once.
-
-#### **Advantages of Shift Register Panels:**
-- **Simplicity**: The shift register method is relatively simple and cost-effective.
-- **Lower component count**: Shift registers reduce the number of required wiring and control circuitry compared to a fully independent PWM system.
-- **Easy to scale**: By daisy-chaining shift registers, you can easily expand the size of the panel.
-
-#### **Key Differences from PWM/GCLK Panels**:
-- Shift register-based panels often require **continuous line addressing**, where the data for each row is shifted in sequence and displayed sequentially.
-- These systems often rely on **persistence of vision** to display a complete image, which can lead to flickering if the refresh rate isn't high enough.
-
----
-
-### Comparison:
-
-| **Aspect**                 | **PWM/GCLK-Based LED Panel**                         | **Shift Register-Based LED Panel**                 |
-|----------------------------|------------------------------------------------------|---------------------------------------------------|
-| **Control Method**          | PWM controls brightness; GCLK synchronizes timing.   | Shift registers control LED states in rows/columns.|
-| **Brightness Control**      | Fine control over brightness for each LED.           | Limited control over brightness, often just on/off.|
-| **Image Quality**           | Higher image quality, smoother gradients, more vibrant colors. | Limited by PWM (or simple on/off states) and persistence of vision. |
-| **Power Efficiency**        | More power-efficient due to on/off modulation.       | Power usage is more constant depending on brightness.|
-| **Complexity**              | More complex due to synchronization and PWM control. | Simpler, but requires line-by-line addressing and faster refresh rates.|
-| **Scan Method**             | Simultaneous control of LEDs via synchronized PWM signals. | Row-by-row sequential addressing with persistence of vision.|
-| **Scaling**                 | Can be harder to scale due to increased complexity.  | Easy to scale by adding more shift registers.     |
-
----
-
-### Conclusion:
-A **PWM-based LED panel** with **GCLK synchronization** is typically used for higher quality displays, allowing fine-grained control of the brightness and color of each LED, which results in smoother, higher-quality images. It also benefits from synchronized operation, reducing flickering and improving the overall visual experience.
-
-On the other hand, a **shift register-based LED panel** is simpler and more cost-effective but relies on continuous line addressing with persistence of vision to create the illusion of a full image. While this can work well for many applications, it often results in less precise control over brightness and color, and may exhibit flickering or lower quality at lower refresh rates.
+Both approaches are technically delightful solutions to a very specific hardware puzzle. They are also, in the grand scheme of things, gloriously irrelevant: these are junk panels. There is no sensible product roadmap hiding here—just an unreasonable amount of engineering spent making dubious panels display pixels properly. Consider the implementations experiments and demonstrations of what the ESP32 peripherals can do, not general-purpose drivers or an argument for buying these panels.
