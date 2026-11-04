@@ -14,7 +14,7 @@ There are two hardware implementations for this LED panel, as one implementation
 
 tl/dr - The ESP32-S3 is the best device to use of the two implementations. However, the ESP32-S2 is super cheap to buy and does the job depending on your needs. 
 
-![image](docs/implementations.jpg)
+![image](MBI5153/implementations.jpg)
 
 ### ESP32-S2: I2S LCD mode, 24-bit parallel DMA
 
