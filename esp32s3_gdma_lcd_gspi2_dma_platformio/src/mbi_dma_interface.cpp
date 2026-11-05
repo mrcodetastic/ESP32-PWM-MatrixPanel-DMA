@@ -476,18 +476,12 @@ void MbiDmaInterface::renderLinearBufferToDMA(
 }
 */
 
-// Convert one set of 12 parallel intensity lanes into a contiguous 16-sample
-// block using a bit-matrix transpose, rather than assembling each sample bit
-// by bit.
-
+// Transpose 8 bit colour into the upper 8 bits of the 16bit stream to the MBI panel (even though these panels are 14bit)
 // ESP32-S3 has no bit-manipulation instructions so we have to do this in software.
 
 /*
-[ 48783][W][Matrix.h:166] update(): [Matrix.h] Effective frame rate: 17.55 frames/sec
-[ 48790][I][main.cpp:100] loop(): [main] profile render=14759 us, render+update=97857 us
-[ 48857][I][mbi_dma_interface.cpp:229] sendCommand(): [mbi_dma_interface] sendVsync: submitting 216 words; LAT high in 2 word(s), first=100 last=101
-[ 48870][W][Matrix.h:154] update(): [Matrix.h] update() timing: framebuffer flush=32837 us, greyscale DMA frame=6481 us, GPSPI2 stop=4271 us, VSYNC=13337 us, GPSPI2 start=52 us, recovery=0 us, total=56981 us
-
+[  6452][W][Matrix.h:169] update(): [Matrix.h] Max possible frame rate: 28.60 frames/sec
+[  6509][W][Matrix.h:157] update(): [Matrix.h] update() timing: framebuffer flush=29948 us, greyscale DMA frame=1680 us, GPSPI2 stop=3204 us, VSYNC=96 us, GPSPI2 start=53 us, recovery=0 us, total=34984 us
 */
 void MbiDmaInterface::renderLinearBufferToDMA_8bit(
     const Rgb8 (*pixel_buffer)[PANEL_PHY_RES_X + 2]) {
