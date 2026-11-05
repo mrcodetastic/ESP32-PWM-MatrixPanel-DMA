@@ -113,7 +113,7 @@ class MbiDmaInterface {
   // Shift the greyscale DMA frame buffer out over the parallel bus.
   esp_err_t sendFrame();
 
-  void restoreFrameLatchBits();
+  void restoreFrameLatchBits(); 
 
   // Zero the greyscale DMA frame buffer and implement latches
   void resetFrameBuffer();
