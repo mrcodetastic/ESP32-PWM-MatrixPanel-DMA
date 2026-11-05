@@ -111,7 +111,8 @@ class MbiDmaInterface {
   // Convert a pre-converted RGB16 framebuffer directly into the greyscale DMA buffer.
   void renderLinearBufferToDMA(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
   void renderLinearBufferToDMAv2(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);  
-  
+  void renderLinearBufferToDMAv3(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
+
 #endif
 
   // Shift the greyscale DMA frame buffer out over the parallel bus.

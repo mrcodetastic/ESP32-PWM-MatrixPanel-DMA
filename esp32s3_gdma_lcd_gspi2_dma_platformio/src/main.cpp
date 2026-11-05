@@ -54,6 +54,9 @@ void setup(void)
 void loop() {
 #if defined(MATRIX_PROFILE)
   const int64_t loop_start_us = esp_timer_get_time();
+  static uint32_t profile_frame_count = 0;
+  static int64_t profile_render_time_us = 0;
+  static int64_t profile_loop_time_us = 0;
 #endif
   // Canvas loop
   float t = (float) ((millis()%4000)/4000.f);
@@ -97,9 +100,28 @@ void loop() {
     matrix.update();  
 #if defined(MATRIX_PROFILE)
     const int64_t loop_done_us = esp_timer_get_time();
-    ESP_LOGI("main", "profile render=%lld us, render+update=%lld us",
-             (long long)(render_done_us - loop_start_us),
-             (long long)(loop_done_us - loop_start_us));
+    profile_render_time_us += render_done_us - loop_start_us;
+    profile_loop_time_us += loop_done_us - loop_start_us;
+    ++profile_frame_count;
+
+    constexpr int64_t PROFILE_INTERVAL_US = 5000000;
+    if (profile_loop_time_us >= PROFILE_INTERVAL_US) {
+      const uint32_t frames = profile_frame_count;
+      const int64_t render_time_us = profile_render_time_us;
+      const int64_t loop_time_us = profile_loop_time_us;
+
+      // Start the next measurement window before logging so serial time is excluded.
+      profile_frame_count = 0;
+      profile_render_time_us = 0;
+      profile_loop_time_us = 0;
+
+      const double render_fps =
+          render_time_us > 0 ? frames * 1000000.0 / render_time_us : 0.0;
+      const double loop_fps =
+          loop_time_us > 0 ? frames * 1000000.0 / loop_time_us : 0.0;
+      ESP_LOGW("main", "profile (%u frames): render=%.2f FPS, render+update=%.2f FPS",
+               (unsigned)frames, render_fps, loop_fps);
+    }
 #endif
   
 }

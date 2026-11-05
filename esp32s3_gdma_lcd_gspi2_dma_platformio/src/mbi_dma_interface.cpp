@@ -21,6 +21,47 @@
 static const char *const TAG = "mbi_dma_interface";
 static constexpr size_t MBI_CMD_TRAILING_LOW_CLOCKS = 16;
 
+#ifdef OPTIMIZE_FOR_SPEED
+// Transpose a 16x16 bit matrix in place. On entry, each value is one GPIO
+// lane's 16-bit intensity; on exit, each value is one parallel DMA sample.
+static void transpose16x16(uint16_t A[16]) {
+    uint32_t j, k;
+    uint16_t t;
+
+    // Stage 1: Swap 8x8 bit blocks (distance 8)
+    for (k = 0; k < 8; k++) {
+        t = (A[k] ^ (A[k + 8] >> 8)) & 0x00FF;
+        A[k] ^= t;
+        A[k + 8] ^= (t << 8);
+    }
+
+    // Stage 2: Swap 4x4 bit blocks (distance 4)
+    for (k = 0; k < 16; k += 8) {
+        for (j = 0; j < 4; j++) {
+            t = (A[k + j] ^ (A[k + j + 4] >> 4)) & 0x0F0F;
+            A[k + j] ^= t;
+            A[k + j + 4] ^= (t << 4);
+        }
+    }
+
+    // Stage 3: Swap 2x2 bit blocks (distance 2)
+    for (k = 0; k < 16; k += 4) {
+        for (j = 0; j < 2; j++) {
+            t = (A[k + j] ^ (A[k + j + 2] >> 2)) & 0x3333;
+            A[k + j] ^= t;
+            A[k + j + 2] ^= (t << 2);
+        }
+    }
+
+    // Stage 4: Swap individual bits (distance 1)
+    for (k = 0; k < 16; k += 2) {
+        t = (A[k] ^ (A[k + 1] >> 1)) & 0x5555;
+        A[k] ^= t;
+        A[k + 1] ^= (t << 1);
+    }
+}
+#endif
+
 // LAT is fixed for every greyscale frame. Keep it in the DMA buffer so each
 // send does not need to walk and rewrite the complete frame before transmission.
 static void restoreFrameLatchBits(ESP32_GREY_DMA_STORAGE_TYPE *frame_buffer) {
@@ -359,6 +400,14 @@ The DMA framing for the above lives in MbiDmaInterface (include/mbi_dma_interfac
 */
 
 #ifdef OPTIMIZE_FOR_SPEED
+/*
+
+[  7368][W][Matrix.h:166] update(): [Matrix.h] Effective frame rate: 13.70 frames/sec
+[  7376][I][main.cpp:100] loop(): [main] profile render=14757 us, render+update=113816 us
+[  7458][I][mbi_dma_interface.cpp:229] sendCommand(): [mbi_dma_interface] sendVsync: submitting 216 words; LAT high in 2 word(s), first=100 last=101
+[  7471][W][Matrix.h:154] update(): [Matrix.h] update() timing: framebuffer flush=48673 us, greyscale DMA frame=6474 us, GPSPI2 stop=4461 us, VSYNC=13304 us, GPSPI2 start=52 us, recovery=0 us, total=72968 us
+
+*/
 void MbiDmaInterface::renderLinearBufferToDMA(
     const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]) {
   if (!_ready || pixel_buffer == nullptr) {
@@ -418,6 +467,12 @@ void MbiDmaInterface::renderLinearBufferToDMA(
 }
 
 // Asked GPT Luna to optimise renderLinearBufferToDMA
+/*
+[  8639][W][Matrix.h:166] update(): [Matrix.h] Effective frame rate: 15.40 frames/sec
+[  8646][I][main.cpp:100] loop(): [main] profile render=14753 us, render+update=105761 us
+[  8721][I][mbi_dma_interface.cpp:229] sendCommand(): [mbi_dma_interface] sendVsync: submitting 216 words; LAT high in 2 word(s), first=100 last=101
+[  8734][W][Matrix.h:154] update(): [Matrix.h] update() timing: framebuffer flush=38573 us, greyscale DMA frame=6472 us, GPSPI2 stop=6521 us, VSYNC=13327 us, GPSPI2 start=45 us, recovery=0 us, total=64940 us
+*/
 void MbiDmaInterface::renderLinearBufferToDMAv2(
     const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]) {
   if (!_ready || pixel_buffer == nullptr) {
@@ -490,6 +545,69 @@ void MbiDmaInterface::renderLinearBufferToDMAv2(
           _frame_buffer[output_offset++] =
               static_cast<ESP32_GREY_DMA_STORAGE_TYPE>(output);
         }
+      }
+    }
+  }
+}
+
+// Convert one set of 12 parallel intensity lanes into a contiguous 16-sample
+// block using a bit-matrix transpose, rather than assembling each sample bit
+// by bit.
+
+// ESP32-S3 has no bit-manipulation instructions so we have to do this in software.
+
+/*
+[ 48783][W][Matrix.h:166] update(): [Matrix.h] Effective frame rate: 17.55 frames/sec
+[ 48790][I][main.cpp:100] loop(): [main] profile render=14759 us, render+update=97857 us
+[ 48857][I][mbi_dma_interface.cpp:229] sendCommand(): [mbi_dma_interface] sendVsync: submitting 216 words; LAT high in 2 word(s), first=100 last=101
+[ 48870][W][Matrix.h:154] update(): [Matrix.h] update() timing: framebuffer flush=32837 us, greyscale DMA frame=6481 us, GPSPI2 stop=4271 us, VSYNC=13337 us, GPSPI2 start=52 us, recovery=0 us, total=56981 us
+
+*/
+void MbiDmaInterface::renderLinearBufferToDMAv3(
+    const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]) {
+  if (!_ready || pixel_buffer == nullptr) {
+    return;
+  }
+
+  constexpr int row_groups =
+      (PANEL_PHY_RES_Y + PANEL_SCAN_LINES - 1) / PANEL_SCAN_LINES;
+
+  for (int row = 0; row < PANEL_SCAN_LINES; ++row) {
+    const size_t row_offset =
+        static_cast<size_t>(row) * MBI_ENTRIES_PER_ROW;
+
+    for (int x = 0; x < PANEL_MBI_RES_X; ++x) {
+      uint16_t lanes[MBI_BITS_PER_CHANNEL] = {};
+
+      for (int group = 0; group < row_groups; ++group) {
+        const int y = group * PANEL_SCAN_LINES + row;
+        if (y >= PANEL_PHY_RES_Y) {
+          continue;
+        }
+
+        const Rgb16 &pixel = pixel_buffer[y][x];
+        const int lane = group * MBI_COLOUR_BITS_PER_GROUP;
+        lanes[15 - lane] = pixel.g;
+        lanes[14 - lane] = pixel.b;
+        lanes[13 - lane] = pixel.r;
+      }
+
+      transpose16x16(lanes);
+
+      const size_t output_offset =
+          row_offset +
+          static_cast<size_t>(x % PANEL_MBI_LED_CHANS) * MBI_ENTRIES_PER_IC +
+          static_cast<size_t>(x / PANEL_MBI_LED_CHANS) * MBI_BITS_PER_CHANNEL;
+      const bool latch_after_block =
+          x / PANEL_MBI_LED_CHANS == PANEL_MBI_CHAIN_LEN - 1;
+
+      for (int sample = 0; sample < MBI_BITS_PER_CHANNEL; ++sample) {
+        const uint16_t latch =
+            latch_after_block && sample == MBI_BITS_PER_CHANNEL - 1
+                ? static_cast<uint16_t>(BIT_LAT)
+                : 0;
+        _frame_buffer[output_offset + sample] =
+            static_cast<ESP32_GREY_DMA_STORAGE_TYPE>(lanes[sample] | latch);
       }
     }
   }

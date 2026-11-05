@@ -122,34 +122,51 @@ class Matrix {
       return;
     }
 
+#if defined(UPDATE_PROFILE)
     const int64_t update_start_us = esp_timer_get_time();
+#endif
     flushFramebuffer();
+#if defined(UPDATE_PROFILE)
     const int64_t flush_done_us = esp_timer_get_time();
+#endif
     mbi_dma_interface.sendFrame();
+#if defined(UPDATE_PROFILE)
     const int64_t frame_done_us = esp_timer_get_time();
+#endif
 
     const esp_err_t stop_err = spi_transfer_loop_stop();
+#if defined(UPDATE_PROFILE)
     const int64_t stop_done_us = esp_timer_get_time();
+#endif
     if (stop_err != ESP_OK) {
       ESP_LOGE(TAG, "GPSPI2 stop failed: %s (%d)", esp_err_to_name(stop_err), (int)stop_err);
     }
     mbi_dma_interface.sendVsync();
+#if defined(UPDATE_PROFILE)
     const int64_t vsync_done_us = esp_timer_get_time();
+#endif
     esp_err_t start_err = spi_transfer_loop_start();
+#if defined(UPDATE_PROFILE)
     const int64_t initial_start_done_us = esp_timer_get_time();
     int64_t restart_done_us = initial_start_done_us;
     int64_t recovery_start_us = initial_start_done_us;
+#endif
     if (start_err != ESP_OK) {
       ESP_LOGE(TAG, "GPSPI2 start failed: %s (%d)", esp_err_to_name(start_err), (int)start_err);
       // One recovery attempt: force the engine idle, then re-arm.
+#if defined(UPDATE_PROFILE)
       recovery_start_us = esp_timer_get_time();
+#endif
       (void)spi_transfer_loop_stop();
       start_err = spi_transfer_loop_start();
+#if defined(UPDATE_PROFILE)
       restart_done_us = esp_timer_get_time();
+#endif
       if (start_err != ESP_OK) {
         ESP_LOGE(TAG, "GPSPI2 recovery start failed: %s (%d)", esp_err_to_name(start_err), (int)start_err);
       }
     }
+#if defined(UPDATE_PROFILE)
     const int64_t update_done_us = esp_timer_get_time();
     ESP_LOGW(TAG, "update() timing: framebuffer flush=%lld us, greyscale DMA frame=%lld us, GPSPI2 stop=%lld us, VSYNC=%lld us, GPSPI2 start=%lld us, recovery=%lld us, total=%lld us",
              (long long)(flush_done_us - update_start_us),
@@ -163,8 +180,8 @@ class Matrix {
     const double effective_fps = (update_done_us > update_start_us)
                       ? 1000000.0 / (double)(update_done_us - update_start_us)
                       : 0.0;
-    ESP_LOGW(TAG, "Effective frame rate: %.2f frames/sec", effective_fps);
-
+    ESP_LOGW(TAG, "Max possible frame rate: %.2f frames/sec", effective_fps);
+#endif
 
   }
 
@@ -425,7 +442,7 @@ class Matrix {
 
   #ifdef OPTIMIZE_FOR_SPEED
   void flushFramebuffer() {
-    mbi_dma_interface.renderLinearBufferToDMAv2(framebuffer);
+    mbi_dma_interface.renderLinearBufferToDMAv3(framebuffer);
   }
   #else
 
