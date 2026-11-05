@@ -59,8 +59,8 @@ void loop() {
   static int64_t profile_loop_time_us = 0;
 #endif
   // Canvas loop
-  float t = (float) ((millis()%4000)/4000.f);
-  float tt = (float) ((millis()%16000)/16000.f);
+  float t = (float) ((millis()%6000)/6000.f);
+  float tt = (float) ((millis()%28000)/28000.f);
 
   for(int x = 0; x < (PANEL_MBI_RES_X); x++)
   {
