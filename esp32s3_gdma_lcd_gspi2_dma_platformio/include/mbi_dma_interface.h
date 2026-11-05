@@ -33,20 +33,15 @@
 #include "app_constants.hpp"
 #include "lcd_gdma_parallel16.hpp"
 
-#ifdef OPTIMIZE_FOR_SPEED
-// Pre-converted 16-bit MBI intensity values used by the direct framebuffer path.
-struct Rgb16 {
-  uint16_t r;
-  uint16_t g;
-  uint16_t b;
+struct Rgb8 {
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
 
-  Rgb16() : r(0), g(0), b(0) {}
-  Rgb16(uint16_t r_, uint16_t g_, uint16_t b_) : r(r_), g(g_), b(b_) {}
+  Rgb8() : r(0), g(0), b(0) {}
+  Rgb8(uint16_t r_, uint16_t g_, uint16_t b_) : r(r_), g(g_), b(b_) {}
 };
 
-// Used by Matrix's inline optimized setPixel() implementation.
-extern const uint16_t lumConvTab_14bit_mbi[256];
-#endif
 
 // ---------------------------------------------------------------------------
 // MBI5153 timing / layout constants (previously magic numbers inside Matrix.h).
@@ -109,17 +104,19 @@ class MbiDmaInterface {
 
 #ifdef OPTIMIZE_FOR_SPEED
   // Convert a pre-converted RGB16 framebuffer directly into the greyscale DMA buffer.
-  void renderLinearBufferToDMA(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
-  void renderLinearBufferToDMAv2(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);  
-  void renderLinearBufferToDMAv3(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
+  //void renderLinearBufferToDMA(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
+
+  void renderLinearBufferToDMA_8bit(const Rgb8 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
 
 #endif
 
   // Shift the greyscale DMA frame buffer out over the parallel bus.
   esp_err_t sendFrame();
 
-  // Zero the greyscale DMA frame buffer.
-  void clearFrame();
+  void restoreFrameLatchBits();
+
+  // Zero the greyscale DMA frame buffer and implement latches
+  void resetFrameBuffer();
 
   /********************************* Diagnostics **************************************/
 

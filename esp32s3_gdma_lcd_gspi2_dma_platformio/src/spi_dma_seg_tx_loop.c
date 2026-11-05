@@ -244,7 +244,7 @@ esp_err_t spi_setup(void)
   device_conf.dummy_bits     = 0;
   device_conf.mode           = 0;
   device_conf.clock_source   = SPI_CLK_SRC_DEFAULT;
-  device_conf.clock_speed_hz = 500000; // 500Khz. This is the initial speed for the first transfer. The actual speed will be set by the DMA loop. In the spi_dma_seg_setup() function, the GPSPI2.clock registers are configured for 8MHz operation.
+  device_conf.clock_speed_hz = 5000000; // 5Mhz. This is the initial speed for the first transfer. The actual speed will be set by the DMA loop. In the spi_dma_seg_setup() function, the GPSPI2.clock registers are configured for 8MHz operation.
   device_conf.spics_io_num   = -1; 
   device_conf.flags          = SPI_DEVICE_HALFDUPLEX | SPI_DEVICE_NO_DUMMY;
   device_conf.queue_size     = 1;
@@ -304,6 +304,23 @@ esp_err_t spi_dma_seg_setup(void)
   // This ensures the ESP-IDF driver doesn't overwrite your dividers during polling start.   
 
   
+  // 10 MHz configuration
+  
+  GPSPI2.clock.clkdiv_pre = 0;
+  GPSPI2.clock.clkcnt_n = 7;   // Divisor = (7 + 1) = 8 -> 80MHz / 8 = 10 MHz
+  GPSPI2.clock.clkcnt_l = 7;   // Must equal clkcnt_n in master mode
+  GPSPI2.clock.clkcnt_h = 3;   // Floor((7 + 1) / 2 - 1) = 3 (high-phase duration)
+  GPSPI2.clock.clk_equ_sysclk = 0;
+
+/*
+  // ~8.89 MHz configuration (Closest possible integer division to 9 MHz)
+  GPSPI2.clock.clkdiv_pre = 0;
+  GPSPI2.clock.clkcnt_n = 8;   // Divisor = (8 + 1) = 9 -> 80MHz / 9 = 8.889 MHz
+  GPSPI2.clock.clkcnt_l = 8;   // Must equal clkcnt_n in master mode
+  GPSPI2.clock.clkcnt_h = 3;   // Floor((8 + 1) / 2 - 1) = 3 (high-phase duration)
+  GPSPI2.clock.clk_equ_sysclk = 0;
+*/
+
   // 8Mhz
   /*
   GPSPI2.clock.clkdiv_pre = 0;
@@ -313,16 +330,8 @@ esp_err_t spi_dma_seg_setup(void)
   GPSPI2.clock.clk_equ_sysclk = 0;  
   */
 
-  // 1Mhz
-/*  
-  GPSPI2.clock.clkdiv_pre = 7;     // Pre-divider = 7 + 1 = 8
-  GPSPI2.clock.clkcnt_n = 9;       // Main divider = 9 + 1 = 10 (Total divisor = 8 * 10 = 80)
-  GPSPI2.clock.clkcnt_l = 9;       // Must be equal to clkcnt_n in master mode
-  GPSPI2.clock.clkcnt_h = 4;       // floor((clkcnt_n + 1) / 2 - 1) = floor(10 / 2 - 1) = 4
-  GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock
-*/
 
-// 2Mhz
+// 2Mhz FOR TESTING!
 /*
 GPSPI2.clock.clkdiv_pre = 1;     // Pre-divider = 1 + 1 = 2
 GPSPI2.clock.clkcnt_n = 10;      // Main divider = 10 + 1 = 11 (Total divisor = 2 * 11 = 22)
@@ -330,21 +339,7 @@ GPSPI2.clock.clkcnt_l = 10;      // Must be equal to clkcnt_n in master mode
 GPSPI2.clock.clkcnt_h = 4;       // floor((10 + 1) / 2 - 1) = 4
 GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock
 */
-// 4Mhz
-GPSPI2.clock.clkdiv_pre = 1;     // Pre-divider = 1 + 1 = 2
-GPSPI2.clock.clkcnt_n = 9;       // Main divider = 9 + 1 = 10 (Total divisor = 2 * 10 = 20)
-GPSPI2.clock.clkcnt_l = 9;       // Must be equal to clkcnt_n in master mode
-GPSPI2.clock.clkcnt_h = 4;       // floor((9 + 1) / 2 - 1) = 4
-GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock
 
-/*
-  // 2.96 MHz
-  GPSPI2.clock.clkdiv_pre = 2;     // Pre-divider = 2 + 1 = 3
-  GPSPI2.clock.clkcnt_n = 8;       // Main divider = 8 + 1 = 9 (Total divisor = 3 * 9 = 27)
-  GPSPI2.clock.clkcnt_l = 8;       // Must match clkcnt_n in master mode
-  GPSPI2.clock.clkcnt_h = 3;       // floor((8 + 1) / 2 - 1) = floor(9 / 2 - 1) = 3
-  GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock  
-*/
 
 
   spi_seg_conf_1[0]  = 0xA0000000UL;          // Magic Value

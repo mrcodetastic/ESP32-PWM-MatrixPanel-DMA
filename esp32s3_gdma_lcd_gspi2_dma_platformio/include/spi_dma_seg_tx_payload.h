@@ -8,8 +8,8 @@
 
 // Compile-Time Configuration Constants
 #define BYTES_PER_GCLK 3
-// #define GCLKS_PER_ROW  513 // clock multiplier off
-#define GCLKS_PER_ROW  257 // clock multiplier on
+//#define GCLKS_PER_ROW  513 // clock multiplier off - 6ms per loop
+#define GCLKS_PER_ROW  257 // clock multiplier on - 3ms per loop
 #define ROWS           20
 #define PADDING_BYTES  16
 
@@ -63,6 +63,7 @@ uint8_t get_gclk_payload_byte_value(int position) {
     return byte_value;
 }
 
+// During padding it sets everything to Row 31. Not sure if this did anything.
 uint8_t get_gclk_payload_byte_valueV2(int position) {
     int sequence_size = BYTES_PER_GCLK * GCLKS_PER_ROW;
     int block_size = PADDING_BYTES + sequence_size + PADDING_BYTES;

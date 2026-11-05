@@ -33,24 +33,8 @@
 
 static const char *TAG = "Matrix.h";
 
-#ifdef OPTIMIZE_FOR_SPEED
-
-// RGB values are pre-converted MBI5153 intensities in this build.
-using RGB = Rgb16;
-
-#else
-
-// Simple 8-bit RGB colour used by the local software framebuffer.
-struct RGB {
-  uint8_t r;
-  uint8_t g;
-  uint8_t b;
-
-  RGB() : r(0), g(0), b(0) {}
-  RGB(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}
-};
-
-#endif  // OPTIMIZE_FOR_SPEED
+// Use this globally
+using RGB = Rgb8;
 
 
 /*
@@ -108,6 +92,8 @@ class Matrix {
     // Nor send the MBI configuration sequence to the panel. This is a series of DMA transfers, each of which
     // is a command sequence (soft reset, pre-active, config reg1, soft reset
     mbi_dma_interface.configurePanel();
+
+    mbi_dma_interface.resetFrameBuffer();
 
     _ready = true;
     return ESP_OK;
@@ -215,9 +201,9 @@ class Matrix {
 
     // Direct memory write: ~5-10 CPU cycles instead of thousands
     framebuffer[y][target_x] = {
-      lumConvTab_14bit_mbi[colour.r], // Pre-shifted to bits 15..2 inside the table
-      lumConvTab_14bit_mbi[colour.g],
-      lumConvTab_14bit_mbi[colour.b]
+      colour.r, // Pre-shifted to bits 15..2 inside the table
+      colour.g,
+      colour.b
     };
   }
 
@@ -442,7 +428,7 @@ class Matrix {
 
   #ifdef OPTIMIZE_FOR_SPEED
   void flushFramebuffer() {
-    mbi_dma_interface.renderLinearBufferToDMAv3(framebuffer);
+    mbi_dma_interface.renderLinearBufferToDMA_8bit(framebuffer);
   }
   #else
 

@@ -89,7 +89,7 @@ esp_err_t Bus_Parallel16::setup_lcd_dma_periph(void) {
   // rather than hand-writing divider register fields. The S3 PLL_F160M source
   // is 160 MHz; ask the HAL for the closest representable rate to 2 MHz.
   constexpr uint32_t LCD_CLOCK_SOURCE_HZ = 160000000;
-  constexpr uint32_t LCD_PCLK_TARGET_HZ = 2000000;
+  constexpr uint32_t LCD_PCLK_TARGET_HZ = 8000000; // USE 2mhz 
   lcd_cam_dev_t *lcd_dev = const_cast<lcd_cam_dev_t *>(_dev);
   lcd_hal_context_t lcd_hal;
   lcd_hal_init(&lcd_hal, 0);
