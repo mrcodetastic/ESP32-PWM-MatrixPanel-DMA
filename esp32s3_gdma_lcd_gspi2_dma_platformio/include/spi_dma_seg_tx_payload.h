@@ -8,7 +8,8 @@
 
 // Compile-Time Configuration Constants
 #define BYTES_PER_GCLK 3
-#define GCLKS_PER_ROW  513
+// #define GCLKS_PER_ROW  513 // clock multiplier off
+#define GCLKS_PER_ROW  257 // clock multiplier on
 #define ROWS           20
 #define PADDING_BYTES  16
 

@@ -58,26 +58,26 @@ static const uint16_t lumConvTab_14bit[256] = {
   14015, 14165, 14317, 14469, 14622, 14777, 14933, 15089, 15247, 15406, 15566, 15727, 15890, 16053, 16217, 16383,
 };
 
-// 16-bit CIE 1931 lookup table
-// Maps 8-bit input (0-255) to 16-bit output (0-65535)
-static const uint16_t lumConvTab_16bit[256] = {
-      0,    28,    57,    85,   114,   142,   171,   199,   228,   256,   285,   313,   342,   370,   399,   427,
-    456,   484,   513,   541,   570,   598,   627,   658,   689,   721,   755,   789,   825,   861,   899,   937,
-    977,  1018,  1060,  1103,  1147,  1192,  1239,  1287,  1336,  1386,  1437,  1490,  1544,  1599,  1656,  1714,
-   1773,  1834,  1896,  1959,  2024,  2090,  2157,  2226,  2297,  2369,  2442,  2517,  2593,  2671,  2751,  2832,
-   2914,  2999,  3085,  3172,  3261,  3352,  3444,  3538,  3634,  3732,  3831,  3932,  4035,  4139,  4245,  4354,
-   4464,  4575,  4689,  4804,  4922,  5041,  5162,  5285,  5410,  5537,  5666,  5797,  5930,  6065,  6202,  6341,
-   6482,  6626,  6771,  6918,  7068,  7220,  7373,  7529,  7687,  7848,  8010,  8175,  8342,  8512,  8683,  8857,
-   9033,  9212,  9393,  9576,  9762,  9949, 10140, 10333, 10528, 10725, 10926, 11128, 11333, 11541, 11751, 11963,
-  12179, 12396, 12617, 12840, 13065, 13293, 13524, 13757, 13993, 14232, 14474, 14718, 14965, 15215, 15467, 15722,
-  15980, 16241, 16505, 16771, 17041, 17313, 17588, 17866, 18147, 18431, 18717, 19007, 19300, 19596, 19894, 20196,
-  20501, 20809, 21119, 21433, 21750, 22071, 22394, 22720, 23050, 23383, 23719, 24058, 24400, 24746, 25095, 25447,
-  25802, 26161, 26523, 26888, 27257, 27629, 28004, 28383, 28765, 29151, 29540, 29932, 30328, 30728, 31131, 31537,
-  31947, 32360, 32777, 33198, 33622, 34050, 34481, 34916, 35355, 35797, 36243, 36693, 37146, 37603, 38064, 38529,
-  38997, 39469, 39945, 40425, 40908, 41396, 41887, 42382, 42881, 43384, 43891, 44401, 44916, 45435, 45957, 46484,
-  47015, 47549, 48088, 48631, 49178, 49728, 50283, 50843, 51406, 51973, 52545, 53120, 53700, 54284, 54873, 55465,
-  56062, 56663, 57269, 57878, 58492, 59111, 59733, 60360, 60992, 61627, 62268, 62912, 63561, 64215, 64873, 65535,
+// The lut table above, but scaled to 14-bit MBI5153 greyscale words (ie. shifted left by 2 bits), so we don't have to compute this EVERY TIME we sent a pixel to the MBI5153 greyscale DMA buffer. This is a performance optimization.
+const uint16_t lumConvTab_14bit_mbi[256] = {
+      0<<2,    7<<2,   14<<2,   21<<2,   28<<2,   36<<2,   43<<2,   50<<2,   57<<2,   64<<2,   71<<2,   78<<2,   85<<2,   93<<2,  100<<2,  107<<2,
+    114<<2,  121<<2,  128<<2,  135<<2,  142<<2,  149<<2,  157<<2,  164<<2,  172<<2,  180<<2,  189<<2,  197<<2,  206<<2,  215<<2,  225<<2,  234<<2,
+    244<<2,  254<<2,  265<<2,  276<<2,  287<<2,  298<<2,  310<<2,  322<<2,  334<<2,  346<<2,  359<<2,  373<<2,  386<<2,  400<<2,  414<<2,  428<<2,
+    443<<2,  458<<2,  474<<2,  490<<2,  506<<2,  522<<2,  539<<2,  557<<2,  574<<2,  592<<2,  610<<2,  629<<2,  648<<2,  668<<2,  688<<2,  708<<2,
+    729<<2,  750<<2,  771<<2,  793<<2,  815<<2,  838<<2,  861<<2,  885<<2,  909<<2,  933<<2,  958<<2,  983<<2, 1009<<2, 1035<<2, 1061<<2, 1088<<2,
+   1116<<2, 1144<<2, 1172<<2, 1201<<2, 1230<<2, 1260<<2, 1290<<2, 1321<<2, 1353<<2, 1384<<2, 1417<<2, 1449<<2, 1482<<2, 1516<<2, 1550<<2, 1585<<2,
+   1621<<2, 1656<<2, 1693<<2, 1729<<2, 1767<<2, 1805<<2, 1843<<2, 1882<<2, 1922<<2, 1962<<2, 2003<<2, 2044<<2, 2085<<2, 2128<<2, 2171<<2, 2214<<2,
+   2258<<2, 2303<<2, 2348<<2, 2394<<2, 2440<<2, 2487<<2, 2535<<2, 2583<<2, 2632<<2, 2681<<2, 2731<<2, 2782<<2, 2833<<2, 2885<<2, 2938<<2, 2991<<2,
+   3045<<2, 3099<<2, 3154<<2, 3210<<2, 3266<<2, 3323<<2, 3381<<2, 3439<<2, 3498<<2, 3558<<2, 3618<<2, 3679<<2, 3741<<2, 3803<<2, 3867<<2, 3930<<2,
+   3995<<2, 4060<<2, 4126<<2, 4193<<2, 4260<<2, 4328<<2, 4397<<2, 4466<<2, 4536<<2, 4607<<2, 4679<<2, 4752<<2, 4825<<2, 4899<<2, 4973<<2, 5049<<2,
+   5125<<2, 5202<<2, 5280<<2, 5358<<2, 5437<<2, 5517<<2, 5598<<2, 5680<<2, 5762<<2, 5845<<2, 5929<<2, 6014<<2, 6100<<2, 6186<<2, 6273<<2, 6361<<2,
+   6450<<2, 6540<<2, 6630<<2, 6722<<2, 6814<<2, 6907<<2, 7001<<2, 7095<<2, 7191<<2, 7287<<2, 7385<<2, 7483<<2, 7582<<2, 7682<<2, 7782<<2, 7884<<2,
+   7986<<2, 8090<<2, 8194<<2, 8299<<2, 8405<<2, 8512<<2, 8620<<2, 8729<<2, 8838<<2, 8949<<2, 9060<<2, 9173<<2, 9286<<2, 9400<<2, 9516<<2, 9632<<2,
+   9749<<2, 9867<<2, 9986<<2, 10106<<2, 10227<<2, 10348<<2, 10471<<2, 10595<<2, 10720<<2, 10845<<2, 10972<<2, 11100<<2, 11228<<2, 11358<<2, 11489<<2, 11620<<2,
+  11753<<2, 11887<<2, 12021<<2, 12157<<2, 12294<<2, 12432<<2, 12570<<2, 12710<<2, 12851<<2, 12993<<2, 13136<<2, 13279<<2, 13424<<2, 13570<<2, 13718<<2, 13866<<2,
+  14015<<2, 14165<<2, 14317<<2, 14469<<2, 14622<<2, 14777<<2, 14933<<2, 15089<<2, 15247<<2, 15406<<2, 15566<<2, 15727<<2, 15890<<2, 16053<<2, 16217<<2, 16383<<2,
 };
+
 
 
 // ---------------------------------------------------------------------------
@@ -250,9 +250,17 @@ esp_err_t MbiDmaInterface::softReset() {
 esp_err_t MbiDmaInterface::sendConfigReg1() {
   if (!_ready) return ESP_ERR_INVALID_STATE;
   clearCommandBuffer();
+/*  
   const uint16_t config_reg = (uint16_t)(
       (ghost_elimination_ON << 14) | ((PANEL_SCAN_LINES - 1) << 8) |
       (gray_scale_14 << 7) | (gclk_multiplier_OFF << 6) | current_1);
+
+*/      
+const uint16_t config_reg = (uint16_t)(
+      (ghost_elimination_ON << 14) | ((PANEL_SCAN_LINES - 1) << 8) |
+      (gray_scale_14 << 7) | (gclk_multiplier_ON << 6) | current_1);
+
+
   const size_t payload_length = PANEL_MBI_CHAIN_LEN * MBI_BITS_PER_CHANNEL;
   for (size_t index = 0; index < payload_length; ++index) {
     const size_t chip = index / MBI_BITS_PER_CHANNEL;
@@ -315,6 +323,9 @@ esp_err_t MbiDmaInterface::configurePanel() {
 // ---------------------------------------------------------------------------
 
 /*
+
+MBI5152 Application Note V1.00- EN
+
 Section 2: The Setting of Gray Scale  
 
 The setting of gray scale data describes as below. 
@@ -334,7 +345,160 @@ before the Vsync command comes.
 9. GCLK must keep at low level more than 7ns before MBI5152 receives the Vsync signal. 
 10. The period of dead time (ie. The 1025th GCLK) must be larger than 100ns.
 
+The gray scale data needs the GCLK to save the data into SRAM. The frequency of GCLK must be higher
+than 20% of DCLK to get the correct data.
+
+
+// MBI5153
+After the last data latch command, it needs at least 50 GCLKs to read the gray scale data into internal display
+buffer before the Vsync command comes. And display is updated immediately until MBI5051/52/53 receives
+the Vsync signal (high pulse of LE pin is sampled by 3-DCLK rising edges), as figure 6 shows.
+
+The DMA framing for the above lives in MbiDmaInterface (include/mbi_dma_interface.h).
+
 */
+
+#ifdef OPTIMIZE_FOR_SPEED
+void MbiDmaInterface::renderLinearBufferToDMA(
+    const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]) {
+  if (!_ready || pixel_buffer == nullptr) {
+    return;
+  }
+
+  const int total_cols = PANEL_PHY_RES_X + 2;
+  const int num_ics = (total_cols + PANEL_MBI_LED_CHANS - 1) / PANEL_MBI_LED_CHANS;
+
+  // Loop through each physical row
+  for (uint16_t y = 0; y < PANEL_PHY_RES_Y; ++y) {
+    uint16_t row_group = y / PANEL_SCAN_LINES; // Compiler optimizes small constants/powers of 2 well
+    uint16_t y_normalised = y % PANEL_SCAN_LINES;
+
+    uint16_t _colourbitsoffset = row_group * MBI_COLOUR_BITS_PER_GROUP;
+    uint16_t _colourbitsclear  = ~(0b111 << _colourbitsoffset);
+    uint16_t g_gpio_bitmask = BIT_G1 << _colourbitsoffset;
+    uint16_t b_gpio_bitmask = BIT_B1 << _colourbitsoffset;
+    uint16_t r_gpio_bitmask = BIT_R1 << _colourbitsoffset;
+
+    uint32_t base_row_offset = MBI_ENTRIES_PER_ROW * y_normalised;
+
+    // Iterate by IC and Channel to completely eliminate division/modulo math
+    for (int ic = 0; ic < num_ics; ++ic) {
+      int ic_base_x = ic * PANEL_MBI_LED_CHANS;
+      uint32_t ic_bit_base = base_row_offset + (ic * MBI_BITS_PER_CHANNEL);
+
+      for (int chan = 0; chan < PANEL_MBI_LED_CHANS; ++chan) {
+        int x = ic_base_x + chan;
+        if (x >= total_cols) {
+          break;
+        }
+
+        // Fetch pre-converted pixel directly from Matrix's framebuffer.
+        const Rgb16 pix = pixel_buffer[y][x];
+        uint16_t r_val = pix.r;
+        uint16_t g_val = pix.g;
+        uint16_t b_val = pix.b;
+
+        // Calculate starting position using pure addition and multiplication (no division/mod)
+        uint32_t bit_start_pos = ic_bit_base + (chan * MBI_ENTRIES_PER_IC);
+
+        // 16-bit bitplane write loop
+        for (uint16_t mask = 0x8000; mask != 0; mask >>= 1) {
+          const uint16_t rgb_bits = (uint16_t)(
+              ((0U - (uint32_t)((g_val & mask) != 0)) & g_gpio_bitmask) |
+              ((0U - (uint32_t)((b_val & mask) != 0)) & b_gpio_bitmask) |
+              ((0U - (uint32_t)((r_val & mask) != 0)) & r_gpio_bitmask));
+
+          _frame_buffer[bit_start_pos] =
+              (_frame_buffer[bit_start_pos] & _colourbitsclear) | rgb_bits;
+          ++bit_start_pos;
+        }
+      }
+    }
+  }
+}
+
+// Asked GPT Luna to optimise renderLinearBufferToDMA
+void MbiDmaInterface::renderLinearBufferToDMAv2(
+    const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]) {
+  if (!_ready || pixel_buffer == nullptr) {
+    return;
+  }
+
+  constexpr int total_cols = PANEL_PHY_RES_X + 2;
+  constexpr int num_ics =
+      (total_cols + PANEL_MBI_LED_CHANS - 1) / PANEL_MBI_LED_CHANS;
+  constexpr int row_groups =
+      (PANEL_PHY_RES_Y + PANEL_SCAN_LINES - 1) / PANEL_SCAN_LINES;
+
+  uint16_t g_masks[row_groups];
+  uint16_t b_masks[row_groups];
+  uint16_t r_masks[row_groups];
+
+  for (int group = 0; group < row_groups; ++group) {
+    const int offset = group * MBI_COLOUR_BITS_PER_GROUP;
+    g_masks[group] = static_cast<uint16_t>(BIT_G1 << offset);
+    b_masks[group] = static_cast<uint16_t>(BIT_B1 << offset);
+    r_masks[group] = static_cast<uint16_t>(BIT_R1 << offset);
+  }
+
+  for (int row = 0; row < PANEL_SCAN_LINES; ++row) {
+    const uint32_t row_offset =
+        static_cast<uint32_t>(row) * MBI_ENTRIES_PER_ROW;
+
+    for (int ic = 0; ic < num_ics; ++ic) {
+      const int x_base = ic * PANEL_MBI_LED_CHANS;
+      const uint32_t ic_offset =
+          row_offset + static_cast<uint32_t>(ic) * MBI_BITS_PER_CHANNEL;
+
+      for (int chan = 0; chan < PANEL_MBI_LED_CHANS; ++chan) {
+        const int x = x_base + chan;
+        if (x >= total_cols) {
+          break;
+        }
+
+        uint16_t red[row_groups] = {};
+        uint16_t green[row_groups] = {};
+        uint16_t blue[row_groups] = {};
+
+        for (int group = 0; group < row_groups; ++group) {
+          const int y = group * PANEL_SCAN_LINES + row;
+          if (y < PANEL_PHY_RES_Y) {
+            const Rgb16 &pixel = pixel_buffer[y][x];
+            red[group] = pixel.r;
+            green[group] = pixel.g;
+            blue[group] = pixel.b;
+          }
+        }
+
+        uint32_t output_offset =
+            ic_offset + static_cast<uint32_t>(chan) * MBI_ENTRIES_PER_IC;
+
+        for (uint16_t mask = 0x8000; mask != 0; mask >>= 1) {
+          uint16_t output = 0;
+
+          for (int group = 0; group < row_groups; ++group) {
+            if (green[group] & mask) output |= g_masks[group];
+            if (blue[group] & mask) output |= b_masks[group];
+            if (red[group] & mask) output |= r_masks[group];
+          }
+
+          // LAT is at the final bit of each channel's IC chain.
+          if (ic == PANEL_MBI_CHAIN_LEN - 1 && mask == 1) {
+            output |= BIT_LAT;
+          }
+
+          _frame_buffer[output_offset++] =
+              static_cast<ESP32_GREY_DMA_STORAGE_TYPE>(output);
+        }
+      }
+    }
+  }
+}
+
+
+
+
+#else
 
 // Specific for the 14 bit LUT lookup table, which is the native hardware range for the MBI5153.
 void MbiDmaInterface::setPixel(uint8_t x, uint8_t y, uint8_t _r_data, uint8_t _g_data, uint8_t _b_data) {
@@ -389,6 +553,7 @@ void MbiDmaInterface::setPixel(uint8_t x, uint8_t y, uint8_t _r_data, uint8_t _g
   }
 }
 
+#endif
 
 esp_err_t MbiDmaInterface::sendFrame() {
   if (!_ready) {

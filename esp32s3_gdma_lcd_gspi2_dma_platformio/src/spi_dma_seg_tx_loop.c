@@ -323,10 +323,18 @@ esp_err_t spi_dma_seg_setup(void)
 */
 
 // 2Mhz
+/*
 GPSPI2.clock.clkdiv_pre = 1;     // Pre-divider = 1 + 1 = 2
 GPSPI2.clock.clkcnt_n = 10;      // Main divider = 10 + 1 = 11 (Total divisor = 2 * 11 = 22)
 GPSPI2.clock.clkcnt_l = 10;      // Must be equal to clkcnt_n in master mode
 GPSPI2.clock.clkcnt_h = 4;       // floor((10 + 1) / 2 - 1) = 4
+GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock
+*/
+// 4Mhz
+GPSPI2.clock.clkdiv_pre = 1;     // Pre-divider = 1 + 1 = 2
+GPSPI2.clock.clkcnt_n = 9;       // Main divider = 9 + 1 = 10 (Total divisor = 2 * 10 = 20)
+GPSPI2.clock.clkcnt_l = 9;       // Must be equal to clkcnt_n in master mode
+GPSPI2.clock.clkcnt_h = 4;       // floor((9 + 1) / 2 - 1) = 4
 GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock
 
 /*
@@ -337,6 +345,8 @@ GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock
   GPSPI2.clock.clkcnt_h = 3;       // floor((8 + 1) / 2 - 1) = floor(9 / 2 - 1) = 3
   GPSPI2.clock.clk_equ_sysclk = 0; // Use divided system clock  
 */
+
+
   spi_seg_conf_1[0]  = 0xA0000000UL;          // Magic Value
   spi_seg_conf_1[0] |= (1 << 3) | (1 << 6);  // SPI_USER_REG | SPI_MS_DLEN_REG
   //spi_seg_conf_1[0] |= (1 << 4); // Include SPI_CLOCK_REG in segment updates

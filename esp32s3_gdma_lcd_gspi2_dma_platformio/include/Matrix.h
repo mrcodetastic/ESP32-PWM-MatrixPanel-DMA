@@ -30,6 +30,16 @@
   }
 #endif
 
+
+static const char *TAG = "Matrix.h";
+
+#ifdef OPTIMIZE_FOR_SPEED
+
+// RGB values are pre-converted MBI5153 intensities in this build.
+using RGB = Rgb16;
+
+#else
+
 // Simple 8-bit RGB colour used by the local software framebuffer.
 struct RGB {
   uint8_t r;
@@ -40,40 +50,8 @@ struct RGB {
   RGB(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}
 };
 
-/*
-  // MBI5152 Application Note V1.00- EN
+#endif  // OPTIMIZE_FOR_SPEED
 
-  Section 2: The Setting of Gray Scale
-  The setting of gray scale data describes as below.
-  1. The sequence of input data starts from scan line 1 scan line 2….  scan line M-1 scan line M
-  (M≦16)
-  2. The data sequence of cascaded IC is ICnICn-1…. IC2IC1.
-  3. The data sequence of each channel is ch15ch14…. ch0.
-  4. The data length of each channel is 16-bits, and the default PWM mode is 16-bits. The sequence of gray
-  sacle is bit15bit14bit13…bit0 as figure 4 shows. The 14-bits gray scale can be set through Bit[7]=1
-  in configuration register 1, and the sequence of gray scale data is bit13bit12… bit0 0 0, the
-  last 2-bits (LSB) are set to “0”.
-  5. The frequency of GCLK must be higher than 20% of DCLK to get the correct gray scale data.
-  6. LE executes the data latch to send gray scale data into SRAM. Each 16xN bits data needs a “data latch
-  command”, where N means the number of cascaded driver.
-  7. After the last data latch, it needs at least 50 GCLKs to read the gray scale data into internal display buffer
-  before the Vsync command comes.
-  8. Display is updated immediately when MBI5152 receives the Vsync signal.
-  9. GCLK must keep at low level more than 7ns before MBI5152 receives the Vsync signal.
-  10. The period of dead time (ie. The 1025th GCLK) must be larger than 100ns.
-
-  The gray scale data needs the GCLK to save the data into SRAM. The frequency of GCLK must be higher
-  than 20% of DCLK to get the correct data.
-
-  // MBI5153
-  After the last data latch command, it needs at least 50 GCLKs to read the gray scale data into internal display
-  buffer before the Vsync command comes. And display is updated immediately until MBI5051/52/53 receives
-  the Vsync signal (high pulse of LE pin is sampled by 3-DCLK rising edges), as figure 6 shows.
-
-  The DMA framing for the above lives in MbiDmaInterface (include/mbi_dma_interface.h).
-*/
-
-static const char *TAG = "Matrix.h";
 
 /*
   Matrix is the "user facing" layer: a software RGB framebuffer plus drawing
@@ -89,8 +67,9 @@ static const char *TAG = "Matrix.h";
     - GPSPI2  (spi_dma_seg_tx_loop.c): GCLK and address line generation. Matrix
                                       drives it directly, exactly as before.
 
-  Drawing writes only to framebuffer[][]; update() flushes it into
-  MbiDmaInterface via setPixel() and then asks it to shift the frame out.
+  Drawing writes only to framebuffer[][]. update() converts the buffer through
+  MbiDmaInterface (or passes it directly in the speed-optimized build), then
+  asks the interface to shift the frame out.
 */
 class Matrix {
 
@@ -143,45 +122,50 @@ class Matrix {
       return;
     }
 
-#if defined(MATRIX_PROFILE)
-    const int64_t profile_start_us = esp_timer_get_time();
-#endif
+    const int64_t update_start_us = esp_timer_get_time();
     flushFramebuffer();
-#if defined(MATRIX_PROFILE)
     const int64_t flush_done_us = esp_timer_get_time();
-#endif
     mbi_dma_interface.sendFrame();
-#if defined(MATRIX_PROFILE)
     const int64_t frame_done_us = esp_timer_get_time();
-#endif
 
     const esp_err_t stop_err = spi_transfer_loop_stop();
+    const int64_t stop_done_us = esp_timer_get_time();
     if (stop_err != ESP_OK) {
       ESP_LOGE(TAG, "GPSPI2 stop failed: %s (%d)", esp_err_to_name(stop_err), (int)stop_err);
     }
     mbi_dma_interface.sendVsync();
-     esp_err_t start_err = spi_transfer_loop_start();
+    const int64_t vsync_done_us = esp_timer_get_time();
+    esp_err_t start_err = spi_transfer_loop_start();
+    const int64_t initial_start_done_us = esp_timer_get_time();
+    int64_t restart_done_us = initial_start_done_us;
+    int64_t recovery_start_us = initial_start_done_us;
     if (start_err != ESP_OK) {
       ESP_LOGE(TAG, "GPSPI2 start failed: %s (%d)", esp_err_to_name(start_err), (int)start_err);
       // One recovery attempt: force the engine idle, then re-arm.
+      recovery_start_us = esp_timer_get_time();
       (void)spi_transfer_loop_stop();
       start_err = spi_transfer_loop_start();
+      restart_done_us = esp_timer_get_time();
       if (start_err != ESP_OK) {
         ESP_LOGE(TAG, "GPSPI2 recovery start failed: %s (%d)", esp_err_to_name(start_err), (int)start_err);
       }
     }
-#if defined(MATRIX_PROFILE)
     const int64_t update_done_us = esp_timer_get_time();
-    ESP_LOGI(TAG, "profile update: flush=%lld us, greyscale DMA=%lld us, VSYNC/GCLK control=%lld us, total=%lld us",
-             (long long)(flush_done_us - profile_start_us),
+    ESP_LOGW(TAG, "update() timing: framebuffer flush=%lld us, greyscale DMA frame=%lld us, GPSPI2 stop=%lld us, VSYNC=%lld us, GPSPI2 start=%lld us, recovery=%lld us, total=%lld us",
+             (long long)(flush_done_us - update_start_us),
              (long long)(frame_done_us - flush_done_us),
-             (long long)(update_done_us - frame_done_us),
-             (long long)(update_done_us - profile_start_us));
-#endif
+             (long long)(stop_done_us - frame_done_us),
+             (long long)(vsync_done_us - stop_done_us),
+             (long long)(initial_start_done_us - vsync_done_us),
+             (long long)(restart_done_us - recovery_start_us),
+             (long long)(update_done_us - update_start_us));
 
-    //log_e("tsfr count: %d", mbi_dma_interface.getTransferCount());
+    const double effective_fps = (update_done_us > update_start_us)
+                      ? 1000000.0 / (double)(update_done_us - update_start_us)
+                      : 0.0;
+    ESP_LOGW(TAG, "Effective frame rate: %.2f frames/sec", effective_fps);
 
-    //mbi_dma_interface.clearFrame();
+
   }
 
 
@@ -200,17 +184,34 @@ class Matrix {
     return PANEL_PHY_RES_Y;
   }
 
+
+#ifdef OPTIMIZE_FOR_SPEED
+
+  // supposedly internal function to set buffer value
+  inline void setPixel(int16_t x, int16_t y, RGB colour) {
+
+    if (!_ready) { return; }
+    if (x < 0 || y < 0 || x >= PANEL_PHY_RES_X || y >= PANEL_PHY_RES_Y) { return; }
+
+    // Apply the physical offset directly during storage
+    uint8_t target_x = x + 2;
+
+    // Direct memory write: ~5-10 CPU cycles instead of thousands
+    framebuffer[y][target_x] = {
+      lumConvTab_14bit_mbi[colour.r], // Pre-shifted to bits 15..2 inside the table
+      lumConvTab_14bit_mbi[colour.g],
+      lumConvTab_14bit_mbi[colour.b]
+    };
+  }
+
   // Write a single pixel into the local framebuffer. Nothing is sent to the
   // panel until update() is called.
   void drawPixel(int16_t x, int16_t y, RGB color) {
-    if (x < 0 || y < 0 || x >= PANEL_PHY_RES_X || y >= PANEL_PHY_RES_Y) {
-      return;
-    }
-    framebuffer[y][x] = color;
+    setPixel(x, y, color);
   }
 
   void drawPixel(int16_t x, int16_t y, uint8_t r_data, uint8_t g_data, uint8_t b_data) {
-    drawPixel(x, y, RGB(r_data, g_data, b_data));
+    setPixel(x, y, RGB(r_data, g_data, b_data));
   }
 
   // includes 565 to 888 conversion
@@ -222,12 +223,47 @@ class Matrix {
     g |= g >> 6;
     b |= b >> 5;
 
-    drawPixel(x, y, RGB(r, g, b));
+    setPixel(x, y, RGB(r, g, b));
   }
 
-  void writePixel(int16_t x, int16_t y, uint8_t r_data, uint8_t g_data, uint8_t b_data) {
-    drawPixel(x, y, r_data, g_data, b_data);
+#else
+
+  // supposedly internal function to set buffer value
+  inline void setPixel(int16_t x, int16_t y, RGB color) {
+    if (!_ready) { return; }
+    if (x < 0 || y < 0 || x >= PANEL_PHY_RES_X || y >= PANEL_PHY_RES_Y) { return; }
+
+    framebuffer[y][x] = color;
   }
+
+  // Write a single pixel into the local framebuffer. Nothing is sent to the
+  // panel until update() is called.
+  void drawPixel(int16_t x, int16_t y, RGB color) {
+    if (x < 0 || y < 0 || x >= PANEL_PHY_RES_X || y >= PANEL_PHY_RES_Y) {
+      return;
+    }
+
+    setPixel(x, y, color);
+  }
+
+  void drawPixel(int16_t x, int16_t y, uint8_t r_data, uint8_t g_data, uint8_t b_data) {
+    setPixel(x, y, RGB(r_data, g_data, b_data));
+  }
+
+  // includes 565 to 888 conversion
+  void drawPixel(int16_t x, int16_t y, uint16_t color) {
+    uint8_t r = (color >> 8) & 0xf8;
+    uint8_t g = (color >> 3) & 0xfc;
+    uint8_t b = (color << 3);
+    r |= r >> 5;
+    g |= g >> 6;
+    b |= b >> 5;
+
+    setPixel(x, y, RGB(r, g, b));
+  }
+
+#endif
+
 
   void drawFastHLine(int16_t x, int16_t y, int16_t w, RGB color) {
     if (y < 0 || y >= PANEL_PHY_RES_Y) {
@@ -241,7 +277,8 @@ class Matrix {
       w = PANEL_PHY_RES_X - x;
     }
     for (int16_t i = 0; i < w; i++) {
-      framebuffer[y][x + i] = color;
+      //framebuffer[y][x + i] = color;
+      setPixel(x + i, y, color);
     }
   }
 
@@ -257,7 +294,8 @@ class Matrix {
       h = PANEL_PHY_RES_Y - y;
     }
     for (int16_t i = 0; i < h; i++) {
-      framebuffer[y + i][x] = color;
+      //framebuffer[y + i][x] = color;
+      setPixel(x, y + i, color);
     }
   }
 
@@ -384,6 +422,13 @@ class Matrix {
   // Push the whole local framebuffer to the panel's greyscale DMA buffer.
   // This only writes into DMA memory owned by MbiDmaInterface; nothing is
   // transmitted until update() calls sendFrame().
+
+  #ifdef OPTIMIZE_FOR_SPEED
+  void flushFramebuffer() {
+    mbi_dma_interface.renderLinearBufferToDMAv2(framebuffer);
+  }
+  #else
+
   void flushFramebuffer() {
     for (int16_t y = 0; y < PANEL_PHY_RES_Y; y++) {
       for (int16_t x = 0; x < PANEL_PHY_RES_X; x++) {
@@ -393,13 +438,20 @@ class Matrix {
     }
   }
 
+  #endif
+
  protected:
 
   bool _ready = false;
 
   // Local software framebuffer. Drawing primitives write here; update()
   // flushes the whole buffer to the panel via MbiDmaInterface::setPixel().
+
+#ifdef OPTIMIZE_FOR_SPEED
+  RGB framebuffer[PANEL_PHY_RES_Y][PANEL_PHY_RES_X+2] = {};  // Two leading offset pixels are retained for the MBI layout.
+#else
   RGB framebuffer[PANEL_PHY_RES_Y][PANEL_PHY_RES_X];
+#endif
 
   /***************************************** PANEL OUTPUT  *****************************************/
 

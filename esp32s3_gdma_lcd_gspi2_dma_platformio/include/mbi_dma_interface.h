@@ -14,9 +14,9 @@
  *     Vsync) and per-pixel greyscale word packing,
  *   - the DMA_LAT-toggle hardware self-test.
  *
- * It knows nothing about the software RGB framebuffer or the drawing
- * primitives: those live in Matrix, which pushes pixels in through setPixel()
- * and asks for a frame to be shifted out with sendFrame().
+ * It does not own the software RGB framebuffer or drawing primitives. Matrix
+ * supplies pixels through setPixel() in the regular build, or passes its
+ * pre-converted framebuffer to the optimized renderer, then requests sendFrame().
  *
  * The SPI/GCLK side of the panel (GPSPI2 + address lines) is deliberately NOT
  * part of this class - it is owned by spi_dma_seg_tx_loop.c and driven by
@@ -33,6 +33,21 @@
 #include "app_constants.hpp"
 #include "lcd_gdma_parallel16.hpp"
 
+#ifdef OPTIMIZE_FOR_SPEED
+// Pre-converted 16-bit MBI intensity values used by the direct framebuffer path.
+struct Rgb16 {
+  uint16_t r;
+  uint16_t g;
+  uint16_t b;
+
+  Rgb16() : r(0), g(0), b(0) {}
+  Rgb16(uint16_t r_, uint16_t g_, uint16_t b_) : r(r_), g(g_), b(b_) {}
+};
+
+// Used by Matrix's inline optimized setPixel() implementation.
+extern const uint16_t lumConvTab_14bit_mbi[256];
+#endif
+
 // ---------------------------------------------------------------------------
 // MBI5153 timing / layout constants (previously magic numbers inside Matrix.h).
 // These values define the output contract; do not change without re-verifying
@@ -47,7 +62,7 @@ constexpr int MBI_ENTRIES_PER_ROW          = PANEL_MBI_LED_CHANS * MBI_ENTRIES_P
 constexpr int MBI_PRE_ACTIVE_LAT_CLOCKS    = 14;   // pre-active = 14 DCLK edges with LE high
 constexpr int MBI_SOFT_RESET_LAT_CLOCKS    = 10;   // soft reset = 10 DCLK edges with LE high
 constexpr int MBI_VSYNC_LAT_CLOCKS         = 2;
-constexpr int MBI_VSYNC_PAYLOAD_LEN        = 400;  // DCLK words used to position the Vsync pulse
+constexpr int MBI_VSYNC_PAYLOAD_LEN        = 200;  // DCLK words used to position the Vsync pulse
 
 constexpr int MBI_CONFIG1_LATCH_TRIGGER    = 4;
 constexpr int MBI_CONFIG2_LATCH_TRIGGER    = 8;
@@ -91,6 +106,13 @@ class MbiDmaInterface {
   // Write one pixel (8-bit RGB) into the MBI greyscale DMA frame buffer.
   // Nothing is sent to the panel until sendFrame() is called.
   void setPixel(uint8_t x, uint8_t y, uint8_t r_data, uint8_t g_data, uint8_t b_data);
+
+#ifdef OPTIMIZE_FOR_SPEED
+  // Convert a pre-converted RGB16 framebuffer directly into the greyscale DMA buffer.
+  void renderLinearBufferToDMA(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);
+  void renderLinearBufferToDMAv2(const Rgb16 (*pixel_buffer)[PANEL_PHY_RES_X + 2]);  
+  
+#endif
 
   // Shift the greyscale DMA frame buffer out over the parallel bus.
   esp_err_t sendFrame();
