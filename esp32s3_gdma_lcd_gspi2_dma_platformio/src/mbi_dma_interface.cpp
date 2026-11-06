@@ -24,7 +24,7 @@ static constexpr size_t MBI_CMD_TRAILING_LOW_CLOCKS = 16;
 #ifdef OPTIMIZE_FOR_SPEED
 // Transpose a 16x16 bit matrix in place. On entry, each value is one GPIO
 // lane's 16-bit intensity; on exit, each value is one parallel DMA sample.
-static void transpose16x16(uint16_t A[16]) {
+static inline void transpose16x16(uint16_t A[16]) {
     uint32_t j, k;
     uint16_t t;
 
