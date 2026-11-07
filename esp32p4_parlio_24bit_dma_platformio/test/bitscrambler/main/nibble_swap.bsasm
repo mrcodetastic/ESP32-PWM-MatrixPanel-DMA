@@ -1,0 +1,10 @@
+cfg eof_on downstream
+cfg trailing_bytes 8
+cfg prefetch true
+
+loop:
+	set 0..3 4..7,
+	set 4..7 0..3,
+	read 8,
+	write 8,
+	jmp loop
