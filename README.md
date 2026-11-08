@@ -1,4 +1,4 @@
-## Using a 78 x 78 pixel MBI5153 based PWM LED MatrixPanel with a ESP32-S2 or S3.
+## Using a 78 x 78 pixel MBI5153GP based PWM LED MatrixPanel with a ESP32-S2 or S3.
 ![image](https://github.com/mrcodetastic/ESP32S3-MBI5153-DMG1075-DMA/assets/12006953/55241e2b-edfa-4dc6-80c6-e6e21618c9ec)
 
 Uses PWM based chip that takes 16 bits sent in a series for every pixel in the relevant chain.
